@@ -142,3 +142,18 @@ export interface TraderQuote {
   tag: 'PSYCHOLOGY' | 'RISK' | 'EXECUTION' | 'PROFITABILITY';
 }
 
+export interface Mt5LiveMarketData {
+  symbol: string;
+  price: number;
+  bid: number;
+  ask: number;
+  spreadPips: number;
+  high24h: number;
+  low24h: number;
+  change24h: number;
+  changePercent: number;
+  timestamp: number;
+  source: string;
+  isLive: boolean;
+}
+

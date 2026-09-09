@@ -12,6 +12,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      // Gracefully handle and suppress opaque cross-origin script errors (e.g. from external iframes, widgets, or CDNs)
+      window.addEventListener('error', function (event) {
+        if (event && (event.message === 'Script error.' || !event.filename)) {
+          event.preventDefault();
+          return true;
+        }
+      }, true);
+
+      window.onerror = function (message, source) {
+        if (message === 'Script error.' || !source) {
+          return true;
+        }
+      };
+
+      window.addEventListener('unhandledrejection', function (event) {
+        if (event && event.reason && (event.reason.message === 'Script error.' || !event.reason.stack)) {
+          event.preventDefault();
+        }
+      });
+    </script>
   </head>
   <body class="bg-[#f0f7ff] text-slate-800 font-sans antialiased selection:bg-sky-500/20 selection:text-sky-700">
     <div id="root"></div>

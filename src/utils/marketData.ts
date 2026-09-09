@@ -1,24 +1,76 @@
-import { Candle } from '../types';
+import { Candle, Mt5LiveMarketData } from '../types';
 
 /**
- * Realistic XAU/USD (Gold) Market Data Generator
- * Generates institutional candlestick data with realistic volatility,
- * liquidity sweeps, order block formation, and session characteristics.
+ * Real-Time MT5 Gold Market Client
+ * Directly streams institutional XAU/USD quotes and candles from live feeds
  */
 
+export async function fetchLiveMt5Price(offset = 0): Promise<Mt5LiveMarketData | null> {
+  try {
+    const res = await fetch('/api/market/gold-live');
+    if (!res.ok) return null;
+    const data: Mt5LiveMarketData = await res.json();
+    if (offset !== 0) {
+      return {
+        ...data,
+        price: Number((data.price + offset).toFixed(2)),
+        bid: Number((data.bid + offset).toFixed(2)),
+        ask: Number((data.ask + offset).toFixed(2)),
+        high24h: Number((data.high24h + offset).toFixed(2)),
+        low24h: Number((data.low24h + offset).toFixed(2)),
+      };
+    }
+    return data;
+  } catch (err) {
+    console.warn('Failed to fetch live MT5 price:', err);
+    return null;
+  }
+}
+
+export async function fetchLiveMt5Candles(
+  timeframe: '1m' | '5m' | '15m' = '5m',
+  offset = 0,
+  limit = 80
+): Promise<Candle[] | null> {
+  try {
+    const res = await fetch(`/api/market/gold-candles?timeframe=${timeframe}&limit=${limit}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.success && Array.isArray(data.candles) && data.candles.length > 0) {
+      if (offset !== 0) {
+        return data.candles.map((c: Candle) => ({
+          ...c,
+          open: Number((c.open + offset).toFixed(2)),
+          high: Number((c.high + offset).toFixed(2)),
+          low: Number((c.low + offset).toFixed(2)),
+          close: Number((c.close + offset).toFixed(2)),
+        }));
+      }
+      return data.candles;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Failed to fetch live MT5 candles:', err);
+    return null;
+  }
+}
+
+/**
+ * Realistic XAU/USD (Gold) Market Data Generator (Fallback / Offline)
+ * Centers dynamically on current real gold spot price (~4420.00)
+ */
 export function generateInitialGoldData(
   count = 80,
   timeframe: '1m' | '5m' | '15m' = '5m',
-  basePrice = 4378.00
+  basePrice = 4420.00
 ): Candle[] {
   const candles: Candle[] = [];
   const stepMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : 15;
   const now = Date.now();
   const startTime = now - count * stepMinutes * 60 * 1000;
 
-  // Realistic gold price centered on 4378
   let currentClose = basePrice;
-  let trend = 1; // 1 = bullish, -1 = bearish
+  let trend = 1;
   let trendCycles = 0;
 
   for (let i = 0; i < count; i++) {
@@ -26,27 +78,22 @@ export function generateInitialGoldData(
     const date = new Date(time);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 
-    // Periodically switch micro-trends to oscillate around 4378
     trendCycles++;
     if (trendCycles > 10 + Math.floor(Math.sin(i / 4) * 3)) {
       trend = -trend;
       trendCycles = 0;
     }
 
-    // Gentle mean reversion pull towards 4378 so price stays accurately in this zone
-    const meanPull = (4378.00 - currentClose) * 0.08;
-
-    // Volatility for gold scalping around 4378
+    const meanPull = (basePrice - currentClose) * 0.05;
     const baseVol = timeframe === '1m' ? 0.45 : timeframe === '5m' ? 0.9 : 1.8;
     const isDisplacement = i % 15 === 0;
     const candleVol = isDisplacement ? baseVol * 1.8 : baseVol * (0.6 + Math.random() * 0.8);
 
     const open = currentClose;
-    const direction = (Math.random() < 0.6 ? trend : -trend);
-    const delta = (Math.random() * candleVol * direction) + meanPull + ((Math.random() - 0.5) * 0.3);
+    const direction = Math.random() < 0.6 ? trend : -trend;
+    const delta = Math.random() * candleVol * direction + meanPull + (Math.random() - 0.5) * 0.3;
     const close = Number((open + delta).toFixed(2));
 
-    // Realistic wicks
     const upperWick = Math.random() * baseVol * (i % 8 === 0 ? 1.8 : 0.6);
     const lowerWick = Math.random() * baseVol * (i % 10 === 0 ? 1.8 : 0.6);
 
@@ -70,13 +117,14 @@ export function generateInitialGoldData(
   return candles;
 }
 
-// Generate the next live tick / update candle
+// Generate the next live tick or incorporate incoming live MT5 tick
 export function generateNextTick(
   candles: Candle[],
-  timeframe: '1m' | '5m' | '15m'
+  timeframe: '1m' | '5m' | '15m',
+  liveTargetPrice?: number
 ): { updatedCandles: Candle[]; newCandleCreated: boolean; tickPrice: number } {
   if (candles.length === 0) {
-    const initial = generateInitialGoldData(60, timeframe, 4378.00);
+    const initial = generateInitialGoldData(60, timeframe, liveTargetPrice || 4420.00);
     return { updatedCandles: initial, newCandleCreated: true, tickPrice: initial[initial.length - 1].close };
   }
 
@@ -86,13 +134,15 @@ export function generateNextTick(
   const candleDuration = stepMinutes * 60 * 1000;
   const elapsed = now - last.time;
 
-  // Realistic gold tick oscillating around 4378.00 zone
-  const anchorBias = (4378.00 - last.close) * 0.05;
-  const tickDelta = Number((((Math.random() - 0.5) * 0.35) + anchorBias).toFixed(2));
-  const newPrice = Number((last.close + tickDelta).toFixed(2));
+  let newPrice: number;
+  if (liveTargetPrice !== undefined && !isNaN(liveTargetPrice) && liveTargetPrice > 0) {
+    newPrice = Number(liveTargetPrice.toFixed(2));
+  } else {
+    const tickDelta = Number(((Math.random() - 0.5) * 0.25).toFixed(2));
+    newPrice = Number((last.close + tickDelta).toFixed(2));
+  }
 
   if (elapsed >= candleDuration) {
-    // Finalize current candle and start a new one
     const date = new Date(now);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
     const newCandle: Candle = {
@@ -108,7 +158,6 @@ export function generateNextTick(
     const updated = [...candles.slice(-119), newCandle];
     return { updatedCandles: updated, newCandleCreated: true, tickPrice: newPrice };
   } else {
-    // Mutate the last candle
     const updatedLast: Candle = {
       ...last,
       high: Number(Math.max(last.high, newPrice).toFixed(2)),

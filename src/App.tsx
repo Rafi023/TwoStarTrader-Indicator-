@@ -8,6 +8,8 @@ import {
   ScalpingSignal,
   IndicatorSettings,
   ScalpPosition,
+  UserAccount,
+  Mt5LiveMarketData,
 } from './types';
 import {
   detectMarketZones,
@@ -16,7 +18,12 @@ import {
   detectReversals,
   generateScalpingSignals,
 } from './utils/indicatorEngine';
-import { generateInitialGoldData, generateNextTick } from './utils/marketData';
+import {
+  generateInitialGoldData,
+  generateNextTick,
+  fetchLiveMt5Price,
+  fetchLiveMt5Candles,
+} from './utils/marketData';
 import { playSignalChime } from './utils/audioAlert';
 import { Header } from './components/Header';
 import { TradingChart } from './components/TradingChart';
@@ -26,7 +33,6 @@ import { PendingApprovalView } from './components/PendingApprovalView';
 import { AdminApprovalModal } from './components/AdminApprovalModal';
 import { ContactModal } from './components/ContactModal';
 import { QuotesTicker } from './components/QuotesTicker';
-import { UserAccount } from './types';
 
 export default function App() {
   // Authentication State
@@ -52,24 +58,35 @@ export default function App() {
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
-  const [basePrice, setBasePrice] = useState<number>(4378.00);
+  // MT5 Broker Offset (e.g. +0.25 to align perfectly with user's specific MT5 broker)
+  const [mt5Offset, setMt5Offset] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('gold_mt5_offset');
+      return saved ? parseFloat(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [mt5Data, setMt5Data] = useState<Mt5LiveMarketData | null>(null);
+  const [basePrice, setBasePrice] = useState<number>(4420.00);
   const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m'>('5m');
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldData(75, '5m', 4378.00));
-  const [prevPrice, setPrevPrice] = useState<number>(4378.00);
+  const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldData(75, '5m', 4420.00));
+  const [prevPrice, setPrevPrice] = useState<number>(4420.00);
   const [isLiveTicking, setIsLiveTicking] = useState<boolean>(true);
 
   // Active Scalp Position (TradingView Buy/Sell & Profit Ratio tool)
   const [activePosition, setActivePosition] = useState<ScalpPosition | null>(() => ({
-    id: 'scalp-4378',
+    id: 'scalp-live',
     direction: 'BUY',
-    entryPrice: 4378.00,
-    stopLossPrice: 4376.50,
-    takeProfitPrice: 4381.00,
+    entryPrice: 4420.00,
+    stopLossPrice: 4417.50,
+    takeProfitPrice: 4425.00,
     profitRatio: 2.0,
-    riskDollars: 1.5,
-    rewardDollars: 3.0,
-    riskPips: 15,
-    rewardPips: 30,
+    riskDollars: 2.5,
+    rewardDollars: 5.0,
+    riskPips: 25,
+    rewardPips: 50,
     lotSize: 0.1,
     openedAt: Date.now(),
     status: 'ACTIVE',
@@ -92,6 +109,50 @@ export default function App() {
   // Current Price
   const currentPrice = candles[candles.length - 1]?.close ?? basePrice;
 
+  // Initial Load: Fetch Live MT5 Price and Candles
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadLiveMarket() {
+      // Fetch live price
+      const live = await fetchLiveMt5Price(mt5Offset);
+      if (!isMounted) return;
+      if (live) {
+        setMt5Data(live);
+        setBasePrice(live.price);
+        setPrevPrice(live.price);
+
+        // Adjust default active position to match live price
+        setActivePosition((prev) => {
+          if (!prev || prev.id !== 'scalp-live') return prev;
+          const p = live.price;
+          return {
+            ...prev,
+            entryPrice: p,
+            stopLossPrice: Number((p - 2.5).toFixed(2)),
+            takeProfitPrice: Number((p + 5.0).toFixed(2)),
+          };
+        });
+      }
+
+      // Fetch live candles
+      const liveCandles = await fetchLiveMt5Candles(timeframe, mt5Offset, 80);
+      if (!isMounted) return;
+      if (liveCandles && liveCandles.length > 0) {
+        setCandles(liveCandles);
+        const lastP = liveCandles[liveCandles.length - 1].close;
+        setPrevPrice(lastP);
+        setBasePrice(lastP);
+      }
+    }
+
+    loadLiveMarket();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Indicators dynamically calculated
   const zones: MarketZone[] = useMemo(() => detectMarketZones(candles), [candles]);
   const orderBlocks: OrderBlock[] = useMemo(() => detectOrderBlocks(candles), [candles]);
@@ -106,12 +167,19 @@ export default function App() {
   const activeSignal = signals.length > 0 ? signals[signals.length - 1] : null;
 
   // Handle Timeframe Switch
-  const handleTimeframeChange = (tf: '1m' | '5m' | '15m') => {
+  const handleTimeframeChange = async (tf: '1m' | '5m' | '15m') => {
     setTimeframe(tf);
     setSettings((s) => ({ ...s, timeframe: tf }));
-    const newCandles = generateInitialGoldData(75, tf, currentPrice);
-    setCandles(newCandles);
-    setPrevPrice(newCandles[newCandles.length - 1].close);
+
+    const liveCandles = await fetchLiveMt5Candles(tf, mt5Offset, 80);
+    if (liveCandles && liveCandles.length > 0) {
+      setCandles(liveCandles);
+      setPrevPrice(liveCandles[liveCandles.length - 1].close);
+    } else {
+      const newCandles = generateInitialGoldData(75, tf, currentPrice);
+      setCandles(newCandles);
+      setPrevPrice(newCandles[newCandles.length - 1].close);
+    }
   };
 
   // Handle Base Price Calibration
@@ -132,38 +200,105 @@ export default function App() {
     }
   };
 
-  // Live Price Ticker Interval around 4378
+  // Handle MT5 Broker Calibration Offset
+  const handleSetMt5Offset = (newOffset: number) => {
+    const delta = newOffset - mt5Offset;
+    setMt5Offset(newOffset);
+    try {
+      localStorage.setItem('gold_mt5_offset', newOffset.toString());
+    } catch {}
+
+    setBasePrice((p) => Number((p + delta).toFixed(2)));
+    setCandles((prev) =>
+      prev.map((c) => ({
+        ...c,
+        open: Number((c.open + delta).toFixed(2)),
+        high: Number((c.high + delta).toFixed(2)),
+        low: Number((c.low + delta).toFixed(2)),
+        close: Number((c.close + delta).toFixed(2)),
+      }))
+    );
+
+    if (mt5Data) {
+      setMt5Data((prev) =>
+        prev
+          ? {
+              ...prev,
+              price: Number((prev.price + delta).toFixed(2)),
+              bid: Number((prev.bid + delta).toFixed(2)),
+              ask: Number((prev.ask + delta).toFixed(2)),
+              high24h: Number((prev.high24h + delta).toFixed(2)),
+              low24h: Number((prev.low24h + delta).toFixed(2)),
+            }
+          : null
+      );
+    }
+  };
+
+  // Manual Force Refresh
+  const handleManualRefreshMt5 = async () => {
+    const live = await fetchLiveMt5Price(mt5Offset);
+    if (live) {
+      setMt5Data(live);
+      setBasePrice(live.price);
+    }
+    const liveCandles = await fetchLiveMt5Candles(timeframe, mt5Offset, 80);
+    if (liveCandles && liveCandles.length > 0) {
+      setCandles(liveCandles);
+    }
+  };
+
+  // Live Price Ticker Interval continuously synchronizing with MT5
   useEffect(() => {
     if (!isLiveTicking) return;
 
-    const interval = setInterval(() => {
-      setCandles((prevCandles) => {
-        const lastClose = prevCandles[prevCandles.length - 1]?.close || basePrice;
-        const { updatedCandles, tickPrice } = generateNextTick(prevCandles, timeframe);
-        setPrevPrice(lastClose);
+    let isPolling = false;
+    const interval = setInterval(async () => {
+      if (isPolling) return;
+      isPolling = true;
 
-        // Check if active position reached TP or SL
-        if (activePosition && activePosition.status === 'ACTIVE') {
-          const isBuy = activePosition.direction === 'BUY';
-          if (isBuy && tickPrice >= activePosition.takeProfitPrice) {
-            setActivePosition((p) => (p ? { ...p, status: 'HIT_TP' } : null));
-            if (settings.soundAlerts) playSignalChime('BUY');
-          } else if (!isBuy && tickPrice <= activePosition.takeProfitPrice) {
-            setActivePosition((p) => (p ? { ...p, status: 'HIT_TP' } : null));
-            if (settings.soundAlerts) playSignalChime('SELL');
-          } else if (isBuy && tickPrice <= activePosition.stopLossPrice) {
-            setActivePosition((p) => (p ? { ...p, status: 'HIT_SL' } : null));
-          } else if (!isBuy && tickPrice >= activePosition.stopLossPrice) {
-            setActivePosition((p) => (p ? { ...p, status: 'HIT_SL' } : null));
-          }
+      try {
+        const live = await fetchLiveMt5Price(mt5Offset);
+        const tickPrice = live ? live.price : undefined;
+
+        if (live) {
+          setMt5Data(live);
         }
 
-        return updatedCandles;
-      });
-    }, 1800);
+        setCandles((prevCandles) => {
+          const lastClose = prevCandles[prevCandles.length - 1]?.close || basePrice;
+          const { updatedCandles, tickPrice: resolvedTick } = generateNextTick(
+            prevCandles,
+            timeframe,
+            tickPrice
+          );
+          setPrevPrice(lastClose);
+
+          // Check if active position reached TP or SL
+          if (activePosition && activePosition.status === 'ACTIVE') {
+            const isBuy = activePosition.direction === 'BUY';
+            if (isBuy && resolvedTick >= activePosition.takeProfitPrice) {
+              setActivePosition((p) => (p ? { ...p, status: 'HIT_TP' } : null));
+              if (settings.soundAlerts) playSignalChime('BUY');
+            } else if (!isBuy && resolvedTick <= activePosition.takeProfitPrice) {
+              setActivePosition((p) => (p ? { ...p, status: 'HIT_TP' } : null));
+              if (settings.soundAlerts) playSignalChime('SELL');
+            } else if (isBuy && resolvedTick <= activePosition.stopLossPrice) {
+              setActivePosition((p) => (p ? { ...p, status: 'HIT_SL' } : null));
+            } else if (!isBuy && resolvedTick >= activePosition.stopLossPrice) {
+              setActivePosition((p) => (p ? { ...p, status: 'HIT_SL' } : null));
+            }
+          }
+
+          return updatedCandles;
+        });
+      } finally {
+        isPolling = false;
+      }
+    }, 1600);
 
     return () => clearInterval(interval);
-  }, [isLiveTicking, timeframe, activePosition, settings.soundAlerts, basePrice]);
+  }, [isLiveTicking, timeframe, activePosition, settings.soundAlerts, basePrice, mt5Offset]);
 
   // Break-even SL mover
   const handleSetBreakEven = () => {
@@ -255,7 +390,7 @@ export default function App() {
       {/* Trader Mindset Quotes Ticker */}
       <QuotesTicker onOpenContact={() => setIsContactOpen(true)} />
 
-      {/* Clean Header with Live Price ($4,378), Controls, Contacts & Admin */}
+      {/* Clean Header with Live MT5 Price, Controls, Contacts & Admin */}
       <Header
         currentPrice={currentPrice}
         prevPrice={prevPrice}
@@ -270,6 +405,10 @@ export default function App() {
         onLogout={handleLogout}
         onOpenContact={() => setIsContactOpen(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        mt5Data={mt5Data}
+        mt5Offset={mt5Offset}
+        onSetMt5Offset={handleSetMt5Offset}
+        onManualRefreshMt5={handleManualRefreshMt5}
       />
 
       {/* Main Focused Workspace: Chart (Left) + Simple Scalp Planner (Right) */}
@@ -319,10 +458,10 @@ export default function App() {
       {/* Footer with TwoStarTrader Contacts & Branding */}
       <footer className="border-t border-slate-200 bg-white px-6 py-3 text-xs text-slate-500 text-center flex flex-col sm:flex-row items-center justify-between gap-2">
         <span>
-          XAU/USD Gold Scalper • Accurate Live Prices (~$4,378) • MT5 Price Scale & Profit Ratio
+          XAU/USD Gold Scalper • Live Real-Time MT5 Feed • Smart Money Order Blocks & Precision Zones
         </span>
         <span className="font-semibold text-slate-700">
-          Regard <strong>TwoStarTrader</strong> • khrafiullah2@gmail.com • 03110116709 • 03188154587
+          Owner <strong>TwoStarTrader</strong> • khrafiullah2@gmail.com • 03110116709 • 03188154587
         </span>
       </footer>
     </div>
