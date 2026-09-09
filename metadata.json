@@ -1,0 +1,6 @@
+{
+  "name": "XAUUSD AI Gold Scalping Indicator",
+  "description": "Precision AI-integrated Gold (XAU/USD) scalping indicator featuring Buy & Sell zones, Order Blocks, Fair Value Gaps, Reversal signals, and AI confluence analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
