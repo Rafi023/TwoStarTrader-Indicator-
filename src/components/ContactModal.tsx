@@ -62,35 +62,6 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
               Direct Contact & Payment Channels
             </h4>
 
-            {/* Email */}
-            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between hover:border-sky-300 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-sky-100 text-sky-700">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-slate-400 block">Official Email</span>
-                  <span className="text-xs font-mono font-bold text-slate-900">khrafiullah2@gmail.com</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleCopy('khrafiullah2@gmail.com', 'email')}
-                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors cursor-pointer"
-                  title="Copy email"
-                >
-                  {copiedKey === 'email' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-                <a
-                  href="mailto:khrafiullah2@gmail.com?subject=XAUUSD%20Gold%20Scalper%20$15%20Access%20Request"
-                  className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                >
-                  Email
-                </a>
-              </div>
-            </div>
-
             {/* WhatsApp 1 */}
             <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between hover:border-emerald-300 transition-colors">
               <div className="flex items-center gap-3">

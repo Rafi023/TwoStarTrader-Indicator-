@@ -158,12 +158,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
 
           {/* Contacts in Navbar */}
           <div className="hidden sm:flex items-center gap-4 text-xs font-mono">
-            <div className="hidden md:flex items-center gap-2 text-slate-400">
-              <Mail className="w-3.5 h-3.5 text-sky-400" />
-              <span>khrafiullah2@gmail.com</span>
-            </div>
             <div className="flex items-center gap-2 text-slate-300">
               <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-slate-400">VIP Support:</span>
               <a href="https://wa.me/923110116709" target="_blank" rel="noreferrer" className="hover:text-emerald-400 underline">
                 03110116709
               </a>
@@ -280,18 +277,8 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
           {/* Contact Direct Strip */}
           <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="space-y-1">
-              <span className="text-slate-400 block font-medium">Owner TwoStarTrader Direct Channels:</span>
+              <span className="text-slate-400 block font-medium">Owner TwoStarTrader WhatsApp Channels:</span>
               <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleCopy('khrafiullah2@gmail.com', 'c_email')}
-                  className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
-                  title="Click to copy email"
-                >
-                  {copiedKey === 'c_email' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  <span>khrafiullah2@gmail.com</span>
-                </button>
-                <span className="text-slate-600">•</span>
                 <button
                   type="button"
                   onClick={() => handleCopy('03110116709', 'c_p1')}
@@ -340,34 +327,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
         {/* Right Column: Sign Up / Login Form */}
         <div className="lg:col-span-5">
           <div className="bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl p-6 sm:p-8 space-y-5">
-            {/* Master Access Direct Card for TwoStarTrader */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-amber-500/15 border-2 border-amber-400/60 shadow-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 font-black flex items-center justify-center text-xs">
-                    ★
-                  </span>
-                  <div>
-                    <span className="text-xs font-black text-amber-300 block">TwoStarTrader Master Portal</span>
-                    <span className="text-[11px] text-slate-300 font-mono">khrafiullah2@gmail.com</span>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase">
-                  Owner
-                </span>
-              </div>
-              <button
-                type="button"
-                id="btn-admin-instant-entry"
-                onClick={handleAdminDirectAccess}
-                disabled={loading}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>1-Click Instant Master Admin Access</span>
-              </button>
-            </div>
-
             {/* Price Badge */}
             <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
@@ -448,13 +407,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
                   )}
                   <button
                     type="button"
-                    onClick={handleAdminDirectAccess}
-                    className="px-2.5 py-1 bg-amber-400/20 text-amber-300 border border-amber-400/40 hover:bg-amber-400/30 font-bold rounded-md text-[11px] cursor-pointer transition-colors"
-                  >
-                    Admin Login
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setErrorMessage(null)}
                     className="px-2 py-1 text-slate-400 hover:text-white text-[11px] ml-auto cursor-pointer"
                   >
@@ -483,19 +435,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
               )}
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-300">Email Address</label>
-                  {!isAdminEmail && (
-                    <button
-                      type="button"
-                      onClick={() => setEmail('khrafiullah2@gmail.com')}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold cursor-pointer underline"
-                      title="Enter Admin Gmail"
-                    >
-                      Enter Admin Gmail
-                    </button>
-                  )}
-                </div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">Email Address</label>
                 <div className="relative">
                   <Mail className={`w-4 h-4 absolute left-3 top-3 ${isAdminEmail ? 'text-amber-400' : 'text-slate-500'}`} />
                   <input
@@ -503,7 +443,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="trader@example.com or khrafiullah2@gmail.com"
+                    placeholder="trader@example.com"
                     className={`w-full bg-slate-950 border rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-hidden transition-all ${
                       isAdminEmail
                         ? 'border-amber-400 ring-2 ring-amber-400/30 text-amber-300 font-bold'
@@ -512,20 +452,20 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
                   />
                 </div>
 
-                {/* Instant Recognition when khrafiullah2@gmail.com is entered */}
+                {/* Instant Recognition when specific admin email is entered */}
                 {isAdminEmail && (
                   <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/25 to-amber-400/10 border-2 border-amber-400 text-xs space-y-2 animate-fadeIn">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-black text-amber-300">
                         <ShieldCheck className="w-4 h-4 text-amber-400" />
-                        <span>Master Admin: TwoStarTrader</span>
+                        <span>Admin Access Verified</span>
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] tracking-wider uppercase">
-                        Admin Access
+                        Admin
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-snug">
-                      Gmail <strong className="text-amber-300 font-mono">khrafiullah2@gmail.com</strong> is verified as the system owner. Click below or press Enter to immediately access the indicator and customer approval console.
+                      Specific admin email recognized. Click below or submit to enter directly into the Admin Panel.
                     </p>
                     <button
                       type="button"
@@ -534,7 +474,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
                       className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
                     >
                       <ShieldCheck className="w-4 h-4" />
-                      <span>Enter Website As Admin Now</span>
+                      <span>Access Admin Panel Now</span>
                     </button>
                   </div>
                 )}
@@ -611,7 +551,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
                 ) : isAdminEmail ? (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Enter As Admin (TwoStarTrader)</span>
+                    <span>Access Admin Panel & Platform</span>
                   </>
                 ) : activeTab === 'signup' ? (
                   <>
@@ -672,22 +612,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
               </div>
             )}
 
-            {/* Quick Login for Owner TwoStarTrader */}
-            <div className="pt-2 border-t border-slate-800 space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>Owner / Admin Direct:</span>
-                <span className="text-amber-400 font-bold">TwoStarTrader</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleAdminQuickLogin}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-colors border border-slate-700 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span>Log In as Admin (khrafiullah2@gmail.com)</span>
-              </button>
-            </div>
-
             {/* Footer Notice */}
             <div className="text-[11px] text-slate-500 text-center leading-relaxed">
               Fee: <strong>$15</strong>. Send proof to <strong>03110116709</strong> or{' '}
@@ -700,7 +624,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
 
       {/* Footer */}
       <footer className="w-full border-t border-slate-800 py-3 text-center text-xs text-slate-500">
-        Regard <strong>TwoStarTrader</strong> • khrafiullah2@gmail.com • WhatsApp: 03110116709 / 03188154587 • Stop Losing Money & Trade SMC
+        Regard <strong>TwoStarTrader</strong> • WhatsApp: 03110116709 / 03188154587 • Stop Losing Money & Trade SMC
       </footer>
     </div>
   );

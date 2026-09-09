@@ -314,6 +314,9 @@ export default function App() {
   // Authentication Handlers
   const handleAuthSuccess = (user: UserAccount) => {
     setCurrentUser(user);
+    if (user.role === 'ADMIN') {
+      setIsAdminOpen(true);
+    }
     try {
       localStorage.setItem('gold_scalper_user', JSON.stringify(user));
     } catch (e) {
@@ -461,7 +464,7 @@ export default function App() {
           XAU/USD Gold Scalper • Live Real-Time MT5 Feed • Smart Money Order Blocks & Precision Zones
         </span>
         <span className="font-semibold text-slate-700">
-          Owner <strong>TwoStarTrader</strong> • khrafiullah2@gmail.com • 03110116709 • 03188154587
+          Owner <strong>TwoStarTrader</strong> • WhatsApp: 03110116709 • 03188154587
         </span>
       </footer>
     </div>
