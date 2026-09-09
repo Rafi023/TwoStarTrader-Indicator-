@@ -225,11 +225,11 @@ export const Header: React.FC<HeaderProps> = ({
         {user?.role === 'ADMIN' && onOpenAdmin && (
           <button
             onClick={onOpenAdmin}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-400/40 text-xs font-bold transition-all shadow-xs cursor-pointer"
-            title="Manage $15 user approvals"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-400/50 text-xs font-bold transition-all shadow-sm hover:shadow-amber-500/20 cursor-pointer"
+            title="Manage customer $15 approvals"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span>Admin Approvals</span>
+            <span className="font-extrabold">👑 Admin Console</span>
           </button>
         )}
 
@@ -237,11 +237,13 @@ export const Header: React.FC<HeaderProps> = ({
         {user && onLogout && (
           <div className="flex items-center gap-2 pl-1">
             <div className="hidden lg:flex flex-col text-right">
-              <span className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">
-                {user.name}
+              <span className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[140px]">
+                {user.role === 'ADMIN' ? 'TwoStarTrader' : user.name}
               </span>
-              <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
-                ✓ VIP Access ($15)
+              <span className={`text-[10px] font-black uppercase tracking-wider ${
+                user.role === 'ADMIN' ? 'text-amber-600' : 'text-emerald-600'
+              }`}>
+                {user.role === 'ADMIN' ? '👑 Master Admin' : '✓ VIP Access ($15)'}
               </span>
             </div>
 

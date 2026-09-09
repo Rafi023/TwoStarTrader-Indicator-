@@ -7,26 +7,26 @@ import {
   Mail,
   Lock,
   User,
-  CheckCircle2,
-  TrendingUp,
-  Sparkles,
   Quote,
   MessageSquare,
   ArrowRight,
   AlertCircle,
-  BarChart3,
-  Flame,
+  Play,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { TRADER_QUOTES } from '../data/quotes';
 
 interface AuthViewProps {
   onAuthSuccess: (user: UserAccount) => void;
+  onEnterDemo?: () => void;
 }
 
-export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
+export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('signup');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -38,12 +38,48 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   // Quotes rotation index
   const [quoteIdx, setQuoteIdx] = useState(0);
 
+  const cleanEmail = email.trim().toLowerCase();
+  const isAdminEmail = cleanEmail === 'khrafiullah2@gmail.com';
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  const handleAdminDirectAccess = async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'khrafiullah2@gmail.com', password: password || 'TwoStarTrader' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Admin login failed');
+      }
+      onAuthSuccess(data.user);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Admin login error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setLoading(true);
 
     try {
+      // If admin email, always use direct admin authentication
+      if (isAdminEmail) {
+        await handleAdminDirectAccess();
+        return;
+      }
+
       const endpoint = activeTab === 'signup' ? '/api/auth/register' : '/api/auth/login';
       const payload =
         activeTab === 'signup'
@@ -71,24 +107,8 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   };
 
   const handleAdminQuickLogin = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'khrafiullah2@gmail.com', password: 'TwoStarTrader' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Admin quick login failed');
-      }
-      onAuthSuccess(data.user);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Admin login error');
-    } finally {
-      setLoading(false);
-    }
+    setEmail('khrafiullah2@gmail.com');
+    await handleAdminDirectAccess();
   };
 
   return (
@@ -110,21 +130,35 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           </div>
         </div>
 
-        {/* Contacts in Navbar */}
-        <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
-          <div className="hidden md:flex items-center gap-2 text-slate-400">
-            <Mail className="w-3.5 h-3.5 text-sky-400" />
-            <span>khrafiullah2@gmail.com</span>
-          </div>
-          <div className="flex items-center gap-2 text-slate-300">
-            <Phone className="w-3.5 h-3.5 text-emerald-400" />
-            <a href="https://wa.me/923110116709" target="_blank" rel="noreferrer" className="hover:text-emerald-400 underline">
-              03110116709
-            </a>
-            <span>•</span>
-            <a href="https://wa.me/923188154587" target="_blank" rel="noreferrer" className="hover:text-emerald-400 underline">
-              03188154587
-            </a>
+        <div className="flex flex-wrap items-center gap-3">
+          {onEnterDemo && (
+            <button
+              type="button"
+              onClick={onEnterDemo}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all border border-amber-400/40 cursor-pointer"
+              title="Explore indicator in live demo mode"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Explore Demo Mode</span>
+            </button>
+          )}
+
+          {/* Contacts in Navbar */}
+          <div className="hidden sm:flex items-center gap-4 text-xs font-mono">
+            <div className="hidden md:flex items-center gap-2 text-slate-400">
+              <Mail className="w-3.5 h-3.5 text-sky-400" />
+              <span>khrafiullah2@gmail.com</span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-300">
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <a href="https://wa.me/923110116709" target="_blank" rel="noreferrer" className="hover:text-emerald-400 underline">
+                03110116709
+              </a>
+              <span>•</span>
+              <a href="https://wa.me/923188154587" target="_blank" rel="noreferrer" className="hover:text-emerald-400 underline">
+                03188154587
+              </a>
+            </div>
           </div>
         </div>
       </header>
@@ -172,9 +206,10 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 {TRADER_QUOTES.map((_, i) => (
                   <button
                     key={i}
+                    type="button"
                     onClick={() => setQuoteIdx(i)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      quoteIdx === i ? 'w-5 bg-amber-400' : 'bg-slate-700'
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      quoteIdx === i ? 'w-5 bg-amber-400' : 'w-2 bg-slate-700'
                     }`}
                   />
                 ))}
@@ -188,8 +223,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800">
               <span className="text-sky-400 font-bold">— {TRADER_QUOTES[quoteIdx].author}</span>
               <button
+                type="button"
                 onClick={() => setQuoteIdx((prev) => (prev + 1) % TRADER_QUOTES.length)}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer font-bold"
               >
                 Next Quote →
               </button>
@@ -230,14 +266,38 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
 
           {/* Contact Direct Strip */}
           <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="space-y-0.5">
-              <span className="text-slate-400 block font-medium">Owner TwoStarTrader Contacts:</span>
+            <div className="space-y-1">
+              <span className="text-slate-400 block font-medium">Owner TwoStarTrader Direct Channels:</span>
               <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
-                <span className="text-amber-400 font-bold">khrafiullah2@gmail.com</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-emerald-400 font-bold">03110116709</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-emerald-400 font-bold">03188154587</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy('khrafiullah2@gmail.com', 'c_email')}
+                  className="flex items-center gap-1 text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                  title="Click to copy email"
+                >
+                  {copiedKey === 'c_email' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>khrafiullah2@gmail.com</span>
+                </button>
+                <span className="text-slate-600">•</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy('03110116709', 'c_p1')}
+                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
+                  title="Click to copy phone"
+                >
+                  {copiedKey === 'c_p1' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>03110116709</span>
+                </button>
+                <span className="text-slate-600">•</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy('03188154587', 'c_p2')}
+                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold cursor-pointer"
+                  title="Click to copy phone"
+                >
+                  {copiedKey === 'c_p2' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>03188154587</span>
+                </button>
               </div>
             </div>
 
@@ -245,8 +305,8 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               <a
                 href="https://wa.me/923110116709?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20and%20pay%20the%20$15%20fee."
                 target="_blank"
-                rel="noreferrer"
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black transition-all flex items-center gap-1.5 shadow-md"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>WhatsApp (03110116709)</span>
@@ -254,8 +314,8 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               <a
                 href="https://wa.me/923188154587?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20and%20pay%20the%20$15%20fee."
                 target="_blank"
-                rel="noreferrer"
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black transition-all flex items-center gap-1.5 shadow-md"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>WhatsApp (03188154587)</span>
@@ -289,7 +349,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                   setActiveTab('signup');
                   setErrorMessage(null);
                 }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   activeTab === 'signup'
                     ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                     : 'text-slate-400 hover:text-white'
@@ -303,7 +363,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                   setActiveTab('login');
                   setErrorMessage(null);
                 }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   activeTab === 'login'
                     ? 'bg-sky-600 text-white shadow-md font-black'
                     : 'text-slate-400 hover:text-white'
@@ -339,21 +399,64 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               )}
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Email Address</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-300">Email Address</label>
+                  {!isAdminEmail && (
+                    <button
+                      type="button"
+                      onClick={() => setEmail('khrafiullah2@gmail.com')}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold cursor-pointer underline"
+                      title="Enter Admin Gmail"
+                    >
+                      Enter Admin Gmail
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <Mail className={`w-4 h-4 absolute left-3 top-3 ${isAdminEmail ? 'text-amber-400' : 'text-slate-500'}`} />
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="trader@example.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:border-amber-500 focus:outline-hidden"
+                    placeholder="trader@example.com or khrafiullah2@gmail.com"
+                    className={`w-full bg-slate-950 border rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-hidden transition-all ${
+                      isAdminEmail
+                        ? 'border-amber-400 ring-2 ring-amber-400/30 text-amber-300 font-bold'
+                        : 'border-slate-800 focus:border-amber-500'
+                    }`}
                   />
                 </div>
+
+                {/* Instant Recognition when khrafiullah2@gmail.com is entered */}
+                {isAdminEmail && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/25 to-amber-400/10 border-2 border-amber-400 text-xs space-y-2 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-black text-amber-300">
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        <span>Master Admin: TwoStarTrader</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] tracking-wider uppercase">
+                        Admin Access
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-snug">
+                      Gmail <strong className="text-amber-300 font-mono">khrafiullah2@gmail.com</strong> is verified as the system owner. Click below or press Enter to immediately access the indicator and customer approval console.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleAdminDirectAccess}
+                      disabled={loading}
+                      className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Enter Website As Admin Now</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {activeTab === 'signup' && (
+              {activeTab === 'signup' && !isAdminEmail && (
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
                     WhatsApp / Phone Number <span className="text-amber-400">*</span>
@@ -362,7 +465,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                     <input
                       type="tel"
-                      required
+                      required={!isAdminEmail}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="03110116709 or +92..."
@@ -376,21 +479,23 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
               )}
 
               <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">Password</label>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  Password {isAdminEmail && <span className="text-amber-400 font-normal">(Optional for Admin)</span>}
+                </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                   <input
                     type="password"
-                    required
+                    required={!isAdminEmail}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder={isAdminEmail ? "Enter any password or leave blank" : "••••••••"}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:border-amber-500 focus:outline-hidden"
                   />
                 </div>
               </div>
 
-              {activeTab === 'signup' && (
+              {activeTab === 'signup' && !isAdminEmail && (
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
                     Payment Note / Transaction ID (Optional)
@@ -410,13 +515,20 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 type="submit"
                 disabled={loading}
                 className={`w-full py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
-                  activeTab === 'signup'
+                  isAdminEmail
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 shadow-amber-500/30 ring-2 ring-amber-400'
+                    : activeTab === 'signup'
                     ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
                     : 'bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/20'
                 } disabled:opacity-50`}
               >
                 {loading ? (
-                  <span>Processing...</span>
+                  <span>Authenticating...</span>
+                ) : isAdminEmail ? (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Enter As Admin (TwoStarTrader)</span>
+                  </>
                 ) : activeTab === 'signup' ? (
                   <>
                     <span>Submit & Request $15 Access</span>
@@ -429,18 +541,63 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                   </>
                 )}
               </button>
+
+              {/* Tab Switch prompt under submit button */}
+              {activeTab === 'signup' ? (
+                <div className="text-center text-xs text-slate-400 pt-1">
+                  Already registered?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('login');
+                      setErrorMessage(null);
+                    }}
+                    className="text-sky-400 hover:text-sky-300 font-bold underline cursor-pointer"
+                  >
+                    Sign In here
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center text-xs text-slate-400 pt-1">
+                  New trader?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('signup');
+                      setErrorMessage(null);
+                    }}
+                    className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                  >
+                    Create Account ($15)
+                  </button>
+                </div>
+              )}
             </form>
+
+            {/* Explore Live Platform Demo Button */}
+            {onEnterDemo && (
+              <div className="pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={onEnterDemo}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600/30 via-sky-600/30 to-amber-600/30 hover:from-emerald-600/40 hover:to-amber-600/40 text-white font-bold text-xs border border-sky-400/40 shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
+                >
+                  <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>Explore Live Platform (VIP Demo Mode)</span>
+                </button>
+              </div>
+            )}
 
             {/* Quick Login for Owner TwoStarTrader */}
             <div className="pt-2 border-t border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>Owner / Admin Testing:</span>
+                <span>Owner / Admin Direct:</span>
                 <span className="text-amber-400 font-bold">TwoStarTrader</span>
               </div>
               <button
                 type="button"
                 onClick={handleAdminQuickLogin}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-colors border border-slate-700 flex items-center justify-center gap-2"
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-colors border border-slate-700 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
                 <span>Log In as Admin (khrafiullah2@gmail.com)</span>

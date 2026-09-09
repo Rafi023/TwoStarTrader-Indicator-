@@ -33,7 +33,16 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
       const saved = localStorage.getItem('gold_scalper_user');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u?.email?.trim().toLowerCase() === 'khrafiullah2@gmail.com') {
+          u.role = 'ADMIN';
+          u.status = 'APPROVED';
+          u.name = u.name || 'TwoStarTrader';
+        }
+        return u;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -208,9 +217,24 @@ export default function App() {
     }
   }, [currentUser?.status, currentUser?.email]);
 
+  const handleEnterDemo = () => {
+    const demoUser: UserAccount = {
+      id: 'usr-demo-trader',
+      name: 'VIP Guest Trader',
+      email: 'demo_trader@xauusd.vip',
+      phone: '03110116709',
+      role: 'USER',
+      status: 'APPROVED',
+      registeredAt: Date.now(),
+      approvedAt: Date.now(),
+      paymentProofNotes: 'VIP Demo Mode Access',
+    };
+    handleAuthSuccess(demoUser);
+  };
+
   // View 1: Not Logged In -> Show VIP Auth & $15 Sign-Up
   if (!currentUser) {
-    return <AuthView onAuthSuccess={handleAuthSuccess} />;
+    return <AuthView onAuthSuccess={handleAuthSuccess} onEnterDemo={handleEnterDemo} />;
   }
 
   // View 2: Logged in but Pending Admin Manual Approval ($15 Payment)
@@ -220,6 +244,7 @@ export default function App() {
         user={currentUser}
         onRefreshUser={refreshUser}
         onLogout={handleLogout}
+        onEnterDemo={handleEnterDemo}
       />
     );
   }

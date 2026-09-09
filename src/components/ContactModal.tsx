@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Mail, Phone, MessageSquare, ShieldCheck, CheckCircle2, DollarSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Mail, Phone, MessageSquare, DollarSign, CheckCircle2, Copy, Check } from 'lucide-react';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -7,7 +7,15 @@ interface ContactModalProps {
 }
 
 export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) => {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
@@ -24,8 +32,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -64,12 +73,22 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                   <span className="text-xs font-mono font-bold text-slate-900">khrafiullah2@gmail.com</span>
                 </div>
               </div>
-              <a
-                href="mailto:khrafiullah2@gmail.com?subject=XAUUSD%20Gold%20Scalper%20$15%20Access%20Request"
-                className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-              >
-                Send Email
-              </a>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleCopy('khrafiullah2@gmail.com', 'email')}
+                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors cursor-pointer"
+                  title="Copy email"
+                >
+                  {copiedKey === 'email' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <a
+                  href="mailto:khrafiullah2@gmail.com?subject=XAUUSD%20Gold%20Scalper%20$15%20Access%20Request"
+                  className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                >
+                  Email
+                </a>
+              </div>
             </div>
 
             {/* WhatsApp 1 */}
@@ -83,15 +102,25 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                   <span className="text-xs font-mono font-bold text-slate-900">03110116709</span>
                 </div>
               </div>
-              <a
-                href="https://wa.me/923110116709?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20($15)."
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Chat</span>
-              </a>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleCopy('03110116709', 'phone1')}
+                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors cursor-pointer"
+                  title="Copy number"
+                >
+                  {copiedKey === 'phone1' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <a
+                  href="https://wa.me/923110116709?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20($15)."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat</span>
+                </a>
+              </div>
             </div>
 
             {/* WhatsApp 2 */}
@@ -105,15 +134,25 @@ export const ContactModal: React.FC<ContactModalProps> = ({ isOpen, onClose }) =
                   <span className="text-xs font-mono font-bold text-slate-900">03188154587</span>
                 </div>
               </div>
-              <a
-                href="https://wa.me/923188154587?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20($15)."
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Chat</span>
-              </a>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleCopy('03188154587', 'phone2')}
+                  className="p-2 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors cursor-pointer"
+                  title="Copy number"
+                >
+                  {copiedKey === 'phone2' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <a
+                  href="https://wa.me/923188154587?text=Hello%20TwoStarTrader,%20I%20want%20to%20get%20access%20to%20the%20XAUUSD%20Gold%20Scalper%20indicator%20($15)."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat</span>
+                </a>
+              </div>
             </div>
           </div>
 

@@ -427,22 +427,54 @@ function saveUsers(users: StoredUser[]) {
 app.post("/api/auth/register", (req, res) => {
   try {
     const { name, email, phone, password, paymentProofNotes } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: "Name, email, and password are required" });
+    if (!email || (!password && email.trim().toLowerCase() !== "khrafiullah2@gmail.com")) {
+      return res.status(400).json({ error: "Email is required" });
     }
 
     const cleanEmail = email.trim().toLowerCase();
     const users = loadUsers();
+    const isAdmin = cleanEmail === "khrafiullah2@gmail.com";
+
+    // If admin enters khrafiullah2@gmail.com, grant full admin access immediately
+    if (isAdmin) {
+      let adminIndex = users.findIndex(u => u.email.toLowerCase() === "khrafiullah2@gmail.com");
+      let adminUser: StoredUser;
+      if (adminIndex !== -1) {
+        adminUser = users[adminIndex];
+        adminUser.role = "ADMIN";
+        adminUser.status = "APPROVED";
+        if (password) adminUser.passwordHash = hashPassword(password);
+      } else {
+        adminUser = {
+          id: "admin-twostartrader",
+          name: name?.trim() || "TwoStarTrader",
+          email: "khrafiullah2@gmail.com",
+          phone: phone ? phone.trim() : "03110116709",
+          passwordHash: hashPassword(password || "TwoStar15!"),
+          role: "ADMIN",
+          status: "APPROVED",
+          registeredAt: Date.now(),
+          approvedAt: Date.now(),
+        };
+        users.push(adminUser);
+      }
+      saveUsers(users);
+      const { passwordHash: _, ...pubAdmin } = adminUser;
+      return res.json({
+        success: true,
+        user: pubAdmin,
+        message: "Welcome TwoStarTrader! Admin access granted.",
+      });
+    }
 
     const existingIndex = users.findIndex(u => u.email.toLowerCase() === cleanEmail);
-    const isAdmin = cleanEmail === "khrafiullah2@gmail.com";
 
     // If already exists and already has a password set
     if (existingIndex !== -1) {
       const existing = users[existingIndex];
       // If was pre-approved by TwoStarTrader by entering customer's email before registration
       if (!existing.passwordHash || existing.paymentProofNotes?.includes("Pre-approved")) {
-        existing.name = name.trim();
+        existing.name = (name || cleanEmail.split("@")[0]).trim();
         existing.phone = phone ? phone.trim() : existing.phone;
         existing.passwordHash = hashPassword(password);
         existing.status = "APPROVED";
@@ -463,15 +495,14 @@ app.post("/api/auth/register", (req, res) => {
 
     const newUser: StoredUser = {
       id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      name: name.trim(),
+      name: (name || cleanEmail.split("@")[0]).trim(),
       email: cleanEmail,
       phone: phone ? phone.trim() : "",
       passwordHash: hashPassword(password),
-      role: isAdmin ? "ADMIN" : "USER",
-      status: isAdmin ? "APPROVED" : "PENDING_APPROVAL",
+      role: "USER",
+      status: "PENDING_APPROVAL",
       paymentProofNotes: paymentProofNotes ? paymentProofNotes.trim() : "",
       registeredAt: Date.now(),
-      approvedAt: isAdmin ? Date.now() : undefined,
     };
 
     users.push(newUser);
@@ -481,9 +512,7 @@ app.post("/api/auth/register", (req, res) => {
     return res.json({
       success: true,
       user: publicUser,
-      message: isAdmin
-        ? "Admin account initialized"
-        : "Registration submitted. Send $15 to TwoStarTrader for manual approval.",
+      message: "Registration submitted. Send $15 to TwoStarTrader for manual approval.",
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Registration failed" });
@@ -494,39 +523,57 @@ app.post("/api/auth/register", (req, res) => {
 app.post("/api/auth/login", (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
     }
 
     const cleanEmail = email.trim().toLowerCase();
     const users = loadUsers();
-    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
 
-    if (!user) {
-      // If admin logging in for first time
-      if (cleanEmail === "khrafiullah2@gmail.com") {
-        const adminUser: StoredUser = {
+    // Instant Master Admin Access when entering khrafiullah2@gmail.com
+    if (cleanEmail === "khrafiullah2@gmail.com") {
+      let adminIndex = users.findIndex(u => u.email.toLowerCase() === "khrafiullah2@gmail.com");
+      let adminUser: StoredUser;
+      if (adminIndex !== -1) {
+        adminUser = users[adminIndex];
+        adminUser.role = "ADMIN";
+        adminUser.status = "APPROVED";
+        if (password) adminUser.passwordHash = hashPassword(password);
+      } else {
+        adminUser = {
           id: "admin-twostartrader",
           name: "TwoStarTrader",
-          email: cleanEmail,
+          email: "khrafiullah2@gmail.com",
           phone: "03110116709",
-          passwordHash: hashPassword(password),
+          passwordHash: hashPassword(password || "TwoStar15!"),
           role: "ADMIN",
           status: "APPROVED",
           registeredAt: Date.now(),
           approvedAt: Date.now(),
         };
         users.push(adminUser);
-        saveUsers(users);
-        const { passwordHash: _, ...pubAdmin } = adminUser;
-        return res.json({ success: true, user: pubAdmin });
       }
+      saveUsers(users);
+      const { passwordHash: _, ...pubAdmin } = adminUser;
+      return res.json({
+        success: true,
+        user: pubAdmin,
+        message: "Welcome TwoStarTrader! Admin access granted.",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({ error: "Password is required" });
+    }
+
+    const user = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+    if (!user) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
     const inputHash = hashPassword(password);
-    const isMasterAdmin = cleanEmail === "khrafiullah2@gmail.com" && (password === "TwoStar15!" || password === "admin123" || password === "TwoStarTrader");
-    const isMatch = user.passwordHash === inputHash || isMasterAdmin;
+    const isMatch = user.passwordHash === inputHash;
 
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid email or password" });

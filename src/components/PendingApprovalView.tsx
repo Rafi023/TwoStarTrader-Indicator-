@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import { UserAccount } from '../types';
 import {
   Clock,
-  CheckCircle2,
   DollarSign,
   Phone,
   Mail,
   MessageSquare,
   RefreshCw,
   LogOut,
-  ShieldAlert,
   Sparkles,
-  Award,
+  Copy,
+  Check,
+  Play,
 } from 'lucide-react';
 import { TRADER_QUOTES } from '../data/quotes';
 
@@ -19,15 +19,24 @@ interface PendingApprovalViewProps {
   user: UserAccount;
   onRefreshUser: () => Promise<void>;
   onLogout: () => void;
+  onEnterDemo?: () => void;
 }
 
 export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
   user,
   onRefreshUser,
   onLogout,
+  onEnterDemo,
 }) => {
   const [isChecking, setIsChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const handleCheckStatus = async () => {
     setIsChecking(true);
@@ -60,13 +69,28 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Log Out</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onEnterDemo && (
+            <button
+              type="button"
+              onClick={onEnterDemo}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold transition-all border border-amber-400/30 cursor-pointer"
+              title="Explore the indicators in interactive demo mode"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Explore Demo</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Log Out</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Container */}
@@ -93,18 +117,21 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={handleCheckStatus}
-              disabled={isChecking}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
-              <span>{isChecking ? 'Checking...' : 'Check Approval Status'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCheckStatus}
+                disabled={isChecking}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+                <span>{isChecking ? 'Checking...' : 'Check Approval Status'}</span>
+              </button>
+            </div>
           </div>
 
           {statusMessage && (
-            <div className="mt-4 p-3 rounded-xl bg-sky-950/60 border border-sky-600/40 text-sky-200 text-xs text-center">
+            <div className="mt-4 p-3 rounded-xl bg-sky-950/60 border border-sky-600/40 text-sky-200 text-xs text-center font-semibold">
               {statusMessage}
             </div>
           )}
@@ -124,6 +151,28 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
               <strong className="text-slate-200 font-mono text-xs">{user.phone || 'Not provided'}</strong>
             </div>
           </div>
+
+          {/* Interactive Demo Mode Option Banner */}
+          {onEnterDemo && (
+            <div className="my-5 p-4 rounded-xl bg-gradient-to-r from-amber-500/20 via-sky-500/20 to-amber-500/20 border border-amber-400/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+                  Want to explore right now?
+                </h4>
+                <p className="text-xs text-slate-300">
+                  You can explore the live gold chart, MT5 price scale, SMC order blocks, and scalp planner in Demo Mode while TwoStarTrader confirms your payment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onEnterDemo}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Launch Demo View</span>
+              </button>
+            </div>
+          )}
 
           {/* Instructions on how to get access */}
           <div className="space-y-4">
@@ -171,12 +220,7 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* WhatsApp 1 */}
-                <a
-                  href={`https://wa.me/923110116709?text=${whatsappMessage}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-700/30 hover:bg-emerald-700/40 border border-emerald-500/40 text-white transition-all group"
-                >
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-700/30 hover:bg-emerald-700/40 border border-emerald-500/40 text-white transition-all group">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-emerald-500 text-white">
                       <Phone className="w-4 h-4" />
@@ -186,19 +230,29 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
                       <span className="text-xs font-mono font-bold">03110116709</span>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black flex items-center gap-1 group-hover:scale-105 transition-transform">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Send Proof</span>
-                  </span>
-                </a>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('03110116709', 'p1')}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy phone number"
+                    >
+                      {copiedKey === 'p1' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <a
+                      href={`https://wa.me/923110116709?text=${whatsappMessage}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center gap-1 transition-transform active:scale-95"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Chat</span>
+                    </a>
+                  </div>
+                </div>
 
                 {/* WhatsApp 2 */}
-                <a
-                  href={`https://wa.me/923188154587?text=${whatsappMessage}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-700/30 hover:bg-emerald-700/40 border border-emerald-500/40 text-white transition-all group"
-                >
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-700/30 hover:bg-emerald-700/40 border border-emerald-500/40 text-white transition-all group">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-emerald-500 text-white">
                       <Phone className="w-4 h-4" />
@@ -208,11 +262,26 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
                       <span className="text-xs font-mono font-bold">03188154587</span>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black flex items-center gap-1 group-hover:scale-105 transition-transform">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Send Proof</span>
-                  </span>
-                </a>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy('03188154587', 'p2')}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy phone number"
+                    >
+                      {copiedKey === 'p2' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    <a
+                      href={`https://wa.me/923188154587?text=${whatsappMessage}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center gap-1 transition-transform active:scale-95"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Chat</span>
+                    </a>
+                  </div>
+                </div>
               </div>
 
               {/* Email Button */}
@@ -226,12 +295,22 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
                     <span className="text-xs font-mono font-bold text-slate-200">khrafiullah2@gmail.com</span>
                   </div>
                 </div>
-                <a
-                  href={`mailto:khrafiullah2@gmail.com?subject=XAUUSD%20$15%20Payment%20Verification&body=${whatsappMessage}`}
-                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-colors"
-                >
-                  Send Email
-                </a>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy('khrafiullah2@gmail.com', 'email')}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    title="Copy email"
+                  >
+                    {copiedKey === 'email' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <a
+                    href={`mailto:khrafiullah2@gmail.com?subject=XAUUSD%20$15%20Payment%20Verification&body=${whatsappMessage}`}
+                    className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Send Email
+                  </a>
+                </div>
               </div>
             </div>
           </div>
