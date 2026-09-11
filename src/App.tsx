@@ -28,25 +28,34 @@ import { playSignalChime } from './utils/audioAlert';
 import { Header } from './components/Header';
 import { TradingChart } from './components/TradingChart';
 import { SimpleScalpPlanner } from './components/SimpleScalpPlanner';
+import { SignalCard } from './components/SignalCard';
 import { AuthView } from './components/AuthView';
 import { PendingApprovalView } from './components/PendingApprovalView';
 import { AdminApprovalModal } from './components/AdminApprovalModal';
 import { ContactModal } from './components/ContactModal';
 import { QuotesTicker } from './components/QuotesTicker';
+import {
+  clientCheckUserStatus,
+  saveCurrentAuthUser,
+  clearCurrentAuthUser,
+  loadCurrentAuthUser,
+  getLocalUsersDb,
+  safeParseResponse,
+  playRegistrationChime,
+} from './utils/authClient';
 
 export default function App() {
   // Authentication State
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
-      const saved = localStorage.getItem('gold_scalper_user');
+      const saved = loadCurrentAuthUser();
       if (saved) {
-        const u = JSON.parse(saved);
-        if (u?.email?.trim().toLowerCase() === 'khrafiullah2@gmail.com') {
-          u.role = 'ADMIN';
-          u.status = 'APPROVED';
-          u.name = u.name || 'TwoStarTrader';
+        if (saved.email?.trim().toLowerCase() === 'khrafiullah2@gmail.com') {
+          saved.role = 'ADMIN';
+          saved.status = 'APPROVED';
+          saved.name = saved.name || 'TwoStarTrader';
         }
-        return u;
+        return saved;
       }
       return null;
     } catch {
@@ -57,6 +66,22 @@ export default function App() {
   // Modal States
   const [isContactOpen, setIsContactOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+
+  // Admin Real-Time Pending Approvals State (Updated each second)
+  const [adminPendingCount, setAdminPendingCount] = useState<number>(() => {
+    try {
+      const local = getLocalUsersDb();
+      return local.filter((u) => u.status === 'PENDING_APPROVAL').length;
+    } catch {
+      return 0;
+    }
+  });
+  const [newPendingToast, setNewPendingToast] = useState<{
+    name: string;
+    email: string;
+    time: number;
+  } | null>(null);
+  const prevAdminPendingCountRef = useRef<number | null>(null);
 
   // MT5 Broker Offset (e.g. +0.25 to align perfectly with user's specific MT5 broker)
   const [mt5Offset, setMt5Offset] = useState<number>(() => {
@@ -69,42 +94,33 @@ export default function App() {
   });
 
   const [mt5Data, setMt5Data] = useState<Mt5LiveMarketData | null>(null);
-  const [basePrice, setBasePrice] = useState<number>(4420.00);
+  const [basePrice, setBasePrice] = useState<number>(4336.50);
   const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m'>('5m');
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldData(75, '5m', 4420.00));
-  const [prevPrice, setPrevPrice] = useState<number>(4420.00);
+  const [candles, setCandles] = useState<Candle[]>(() => generateInitialGoldData(75, '5m', 4336.50));
+  const [prevPrice, setPrevPrice] = useState<number>(4336.50);
   const [isLiveTicking, setIsLiveTicking] = useState<boolean>(true);
 
-  // Active Scalp Position (TradingView Buy/Sell & Profit Ratio tool)
-  const [activePosition, setActivePosition] = useState<ScalpPosition | null>(() => ({
-    id: 'scalp-live',
-    direction: 'BUY',
-    entryPrice: 4420.00,
-    stopLossPrice: 4417.50,
-    takeProfitPrice: 4425.00,
-    profitRatio: 2.0,
-    riskDollars: 2.5,
-    rewardDollars: 5.0,
-    riskPips: 25,
-    rewardPips: 50,
-    lotSize: 0.1,
-    openedAt: Date.now(),
-    status: 'ACTIVE',
-  }));
+  // Active Scalp Position (Only set when user explicitly executes / opens a live position)
+  const [activePosition, setActivePosition] = useState<ScalpPosition | null>(null);
 
-  // Settings
+  // Settings - Pro Trader Clean Mode by default (Only Signals, TPs, and Live MT5 prices)
   const [settings, setSettings] = useState<IndicatorSettings>({
     timeframe: '5m',
-    showOrderBlocks: true,
-    showFVG: true,
-    showBuySellZones: true,
-    showReversals: true,
+    showOrderBlocks: false,
+    showFVG: false,
+    showBuySellZones: false,
+    showReversals: false,
     showSignals: true,
-    showEquilibrium: true,
+    showEquilibrium: false,
     soundAlerts: true,
     autoAiAnalysis: false,
     riskRewardRatio: 2.0,
+    tradeMode: 'ALL',
+    signalBias: 'AUTO',
+    showEMAs: false,
   });
+
+  const [rightPanelTab, setRightPanelTab] = useState<'PLANNER' | 'SIGNAL'>('SIGNAL');
 
   // Current Price
   const currentPrice = candles[candles.length - 1]?.close ?? basePrice;
@@ -121,18 +137,6 @@ export default function App() {
         setMt5Data(live);
         setBasePrice(live.price);
         setPrevPrice(live.price);
-
-        // Adjust default active position to match live price
-        setActivePosition((prev) => {
-          if (!prev || prev.id !== 'scalp-live') return prev;
-          const p = live.price;
-          return {
-            ...prev,
-            entryPrice: p,
-            stopLossPrice: Number((p - 2.5).toFixed(2)),
-            takeProfitPrice: Number((p + 5.0).toFixed(2)),
-          };
-        });
       }
 
       // Fetch live candles
@@ -159,8 +163,8 @@ export default function App() {
   const fvgs: FairValueGap[] = useMemo(() => detectFairValueGaps(candles), [candles]);
   const reversals: ReversalEvent[] = useMemo(() => detectReversals(candles), [candles]);
   const signals: ScalpingSignal[] = useMemo(
-    () => generateScalpingSignals(candles, zones, orderBlocks, fvgs, reversals),
-    [candles, zones, orderBlocks, fvgs, reversals]
+    () => generateScalpingSignals(candles, zones, orderBlocks, fvgs, reversals, settings.tradeMode, settings.signalBias),
+    [candles, zones, orderBlocks, fvgs, reversals, settings.tradeMode, settings.signalBias]
   );
 
   // Active Signal
@@ -248,33 +252,28 @@ export default function App() {
     }
   };
 
-  // Live Price Ticker Interval continuously synchronizing with MT5
+      // Unified Live Price Ticker: Syncs and ticks exactly every 1 second
   useEffect(() => {
     if (!isLiveTicking) return;
-
-    let isPolling = false;
-    const interval = setInterval(async () => {
-      if (isPolling) return;
-      isPolling = true;
-
+    let isMounted = true;
+    
+    const syncAndTick = async () => {
       try {
         const live = await fetchLiveMt5Price(mt5Offset);
-        const tickPrice = live ? live.price : undefined;
-
-        if (live) {
-          setMt5Data(live);
-        }
-
+        if (!isMounted || !live) return;
+        
+        setMt5Data(live);
+        
         setCandles((prevCandles) => {
           const lastClose = prevCandles[prevCandles.length - 1]?.close || basePrice;
           const { updatedCandles, tickPrice: resolvedTick } = generateNextTick(
             prevCandles,
             timeframe,
-            tickPrice
+            live.price
           );
+          
           setPrevPrice(lastClose);
 
-          // Check if active position reached TP or SL
           if (activePosition && activePosition.status === 'ACTIVE') {
             const isBuy = activePosition.direction === 'BUY';
             if (isBuy && resolvedTick >= activePosition.takeProfitPrice) {
@@ -292,13 +291,18 @@ export default function App() {
 
           return updatedCandles;
         });
-      } finally {
-        isPolling = false;
+      } catch (err) {
+        // silent
       }
-    }, 1600);
-
-    return () => clearInterval(interval);
-  }, [isLiveTicking, timeframe, activePosition, settings.soundAlerts, basePrice, mt5Offset]);
+    };
+    
+    syncAndTick();
+    const interval = setInterval(syncAndTick, 1000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isLiveTicking, mt5Offset, timeframe, basePrice, settings, activePosition]);
 
   // Break-even SL mover
   const handleSetBreakEven = () => {
@@ -317,43 +321,80 @@ export default function App() {
     if (user.role === 'ADMIN') {
       setIsAdminOpen(true);
     }
-    try {
-      localStorage.setItem('gold_scalper_user', JSON.stringify(user));
-    } catch (e) {
-      console.error(e);
-    }
+    saveCurrentAuthUser(user);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    try {
-      localStorage.removeItem('gold_scalper_user');
-    } catch (e) {
-      console.error(e);
-    }
+    clearCurrentAuthUser();
   };
 
   const refreshUser = async () => {
     if (!currentUser?.email) return;
     try {
-      const res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
-      const data = await res.json();
-      if (res.ok && data.user) {
-        setCurrentUser(data.user);
-        localStorage.setItem('gold_scalper_user', JSON.stringify(data.user));
+      const updated = await clientCheckUserStatus(currentUser.email);
+      if (updated && updated.status !== currentUser.status) {
+        setCurrentUser(updated);
       }
     } catch (err) {
-      console.error('Failed to refresh user:', err);
+      console.warn('Silent refresh check:', err);
     }
   };
 
-  // Check approval periodically if pending
+  // 1-second real-time check for member approval
   useEffect(() => {
     if (currentUser && currentUser.status === 'PENDING_APPROVAL') {
-      const interval = setInterval(refreshUser, 6000);
+      const interval = setInterval(refreshUser, 1000);
       return () => clearInterval(interval);
     }
   }, [currentUser?.status, currentUser?.email]);
+
+  // 1-second real-time polling for pending approvals when Admin is logged in
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'ADMIN') return;
+
+    const checkPendingCount = async () => {
+      try {
+        const local = getLocalUsersDb();
+        const localPending = local.filter((u) => u.status === 'PENDING_APPROVAL');
+
+        const res = await fetch(`/api/admin/pending-count?adminEmail=${encodeURIComponent(currentUser.email)}`);
+        const parsed = await safeParseResponse(res);
+        let count = localPending.length;
+        let latestUser: any = localPending[localPending.length - 1];
+
+        if (parsed.ok && typeof parsed.data?.pendingCount === 'number') {
+          count = Math.max(parsed.data.pendingCount, localPending.length);
+          if (parsed.data.latestPending) {
+            latestUser = parsed.data.latestPending;
+          }
+        }
+
+        if (
+          prevAdminPendingCountRef.current !== null &&
+          count > prevAdminPendingCountRef.current
+        ) {
+          // New member registered! Play chime and show toast
+          playRegistrationChime();
+          if (latestUser) {
+            setNewPendingToast({
+              name: latestUser.name,
+              email: latestUser.email,
+              time: Date.now(),
+            });
+          }
+        }
+        prevAdminPendingCountRef.current = count;
+        setAdminPendingCount(count);
+      } catch (err) {
+        // silent
+      }
+    };
+
+    checkPendingCount();
+    const interval = setInterval(checkPendingCount, 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.role, currentUser?.email]);
 
   const handleEnterDemo = () => {
     const demoUser: UserAccount = {
@@ -412,7 +453,43 @@ export default function App() {
         mt5Offset={mt5Offset}
         onSetMt5Offset={handleSetMt5Offset}
         onManualRefreshMt5={handleManualRefreshMt5}
+        pendingCount={adminPendingCount}
       />
+
+      {/* Real-Time Floating Notification when Member Registers */}
+      {newPendingToast && currentUser.role === 'ADMIN' && (
+        <div className="fixed top-20 right-4 sm:right-6 z-50 bg-slate-950 text-white p-4 rounded-2xl border-2 border-amber-400 shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 max-w-md">
+          <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-lg shrink-0 animate-pulse shadow-md">
+            ★
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 text-xs font-black text-amber-400 uppercase tracking-wide">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping inline-block" />
+              <span>New Member Just Registered!</span>
+            </div>
+            <p className="text-xs text-slate-200 truncate font-semibold mt-0.5">
+              <strong>{newPendingToast.name}</strong> ({newPendingToast.email})
+            </p>
+            <p className="text-[10px] text-slate-400">Awaiting your manual $15 approval</p>
+          </div>
+          <button
+            onClick={() => {
+              setIsAdminOpen(true);
+              setNewPendingToast(null);
+            }}
+            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all shrink-0 cursor-pointer"
+          >
+            Review Now
+          </button>
+          <button
+            onClick={() => setNewPendingToast(null)}
+            className="text-slate-400 hover:text-white p-1 cursor-pointer"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Focused Workspace: Chart (Left) + Simple Scalp Planner (Right) */}
       <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6">
@@ -434,15 +511,77 @@ export default function App() {
             />
           </div>
 
-          {/* Simple Scalp Planner (Buy / Sell & Profit Ratio) */}
-          <div className="lg:col-span-4 flex flex-col">
-            <SimpleScalpPlanner
-              currentPrice={currentPrice}
-              activePosition={activePosition}
-              onApplyPosition={(pos) => setActivePosition(pos)}
-              onClosePosition={() => setActivePosition(null)}
-              onSetBreakEven={handleSetBreakEven}
-            />
+          {/* Simple Scalp Planner & Institutional Signal Matrix */}
+          <div className="lg:col-span-4 flex flex-col space-y-3">
+            {/* Top View Selector: Planner vs Confluence Signal Card */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('PLANNER')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  rightPanelTab === 'PLANNER'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                ⚡ Scalp & Day Planner
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightPanelTab('SIGNAL')}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  rightPanelTab === 'SIGNAL'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>🎯 Confluence Signal</span>
+                {activeSignal && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                )}
+              </button>
+            </div>
+
+            {rightPanelTab === 'PLANNER' ? (
+              <SimpleScalpPlanner
+                currentPrice={currentPrice}
+                activePosition={activePosition}
+                activeSignal={activeSignal}
+                onApplyPosition={(pos) => setActivePosition(pos)}
+                onClosePosition={() => setActivePosition(null)}
+                onSetBreakEven={handleSetBreakEven}
+              />
+            ) : (
+              <SignalCard
+                signal={activeSignal}
+                currentPrice={currentPrice}
+                onAnalyzeWithAi={() => {}}
+                isAiLoading={false}
+                onApplyToPlanner={(sig) => {
+                  const isSigBuy = sig.type.includes('BUY');
+                  const slDist = Math.max(0.8, Math.abs(sig.entryPrice - sig.stopLoss));
+                  const tpDist = Math.abs(sig.takeProfit2 - sig.entryPrice);
+                  const ratio = slDist > 0 ? Number((tpDist / slDist).toFixed(1)) : 2.0;
+
+                  setActivePosition({
+                    id: `pos-${Date.now()}`,
+                    direction: isSigBuy ? 'BUY' : 'SELL',
+                    entryPrice: Number(sig.entryPrice.toFixed(2)),
+                    stopLossPrice: Number(sig.stopLoss.toFixed(2)),
+                    takeProfitPrice: Number(sig.takeProfit2.toFixed(2)),
+                    profitRatio: ratio,
+                    riskDollars: Number(slDist.toFixed(2)),
+                    rewardDollars: Number(tpDist.toFixed(2)),
+                    riskPips: sig.riskPips || Math.round(slDist * 10),
+                    rewardPips: sig.rewardPips || Math.round(tpDist * 10),
+                    lotSize: 0.1,
+                    openedAt: Date.now(),
+                    status: 'ACTIVE',
+                  });
+                  setRightPanelTab('PLANNER');
+                }}
+              />
+            )}
           </div>
         </div>
       </main>

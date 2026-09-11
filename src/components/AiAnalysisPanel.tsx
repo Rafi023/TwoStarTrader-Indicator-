@@ -12,6 +12,7 @@ import {
   TrendingDown,
   Compass,
 } from 'lucide-react';
+import { safeParseResponse } from '../utils/authClient';
 
 interface AiAnalysisPanelProps {
   analysis: AiAnalysisResult | null;
@@ -54,11 +55,13 @@ export const AiAnalysisPanel: React.FC<AiAnalysisPanelProps> = ({
           latestSignal,
         }),
       });
-      const data = await res.json();
-      setChatHistory((prev) => [
-        ...prev,
-        { sender: 'AI', text: data.answer || 'Analysis complete.' },
-      ]);
+      const parsed = await safeParseResponse(res);
+      const answer = parsed.ok && parsed.data?.answer ? parsed.data.answer : null;
+      if (answer) {
+        setChatHistory((prev) => [...prev, { sender: 'AI', text: answer }]);
+      } else {
+        throw new Error('Fallback to local intelligence');
+      }
     } catch {
       setChatHistory((prev) => [
         ...prev,

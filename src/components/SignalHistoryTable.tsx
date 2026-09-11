@@ -89,16 +89,29 @@ export const SignalHistoryTable: React.FC<SignalHistoryTableProps> = ({
                   </td>
 
                   <td className="py-2.5 px-3">
-                    <span
-                      className={`inline-flex items-center gap-1 font-sans font-bold px-2 py-0.5 rounded text-[10px] ${
-                        isBuy
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}
-                    >
-                      {isBuy ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      <span>{sig.type.replace('_', ' ')}</span>
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center gap-1 font-sans font-bold px-2 py-0.5 rounded text-[10px] ${
+                          isBuy
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
+                      >
+                        {isBuy ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        <span>{sig.type.replace('_', ' ')}</span>
+                      </span>
+                      {sig.signalGrade && (
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase ${
+                          sig.signalGrade === 'A+'
+                            ? 'bg-amber-400 text-slate-950 font-extrabold'
+                            : sig.signalGrade === 'A'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {sig.signalGrade}
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   <td className="py-2.5 px-3 font-bold text-slate-800">

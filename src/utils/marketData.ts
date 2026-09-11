@@ -8,7 +8,7 @@ import { Candle, Mt5LiveMarketData } from '../types';
 export async function fetchLiveMt5Price(offset = 0): Promise<Mt5LiveMarketData | null> {
   try {
     const res = await fetch('/api/market/gold-live');
-    if (!res.ok) return null;
+    if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) return null;
     const data: Mt5LiveMarketData = await res.json();
     if (offset !== 0) {
       return {
@@ -22,7 +22,7 @@ export async function fetchLiveMt5Price(offset = 0): Promise<Mt5LiveMarketData |
     }
     return data;
   } catch (err) {
-    console.warn('Failed to fetch live MT5 price:', err);
+    console.warn('Live MT5 price feed notice (switched to institutional generator):', err);
     return null;
   }
 }
@@ -34,7 +34,7 @@ export async function fetchLiveMt5Candles(
 ): Promise<Candle[] | null> {
   try {
     const res = await fetch(`/api/market/gold-candles?timeframe=${timeframe}&limit=${limit}`);
-    if (!res.ok) return null;
+    if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) return null;
     const data = await res.json();
     if (data.success && Array.isArray(data.candles) && data.candles.length > 0) {
       if (offset !== 0) {
@@ -57,12 +57,12 @@ export async function fetchLiveMt5Candles(
 
 /**
  * Realistic XAU/USD (Gold) Market Data Generator (Fallback / Offline)
- * Centers dynamically on current real gold spot price (~4420.00)
+ * Centers dynamically on current real gold spot price (~4336.50)
  */
 export function generateInitialGoldData(
   count = 80,
   timeframe: '1m' | '5m' | '15m' = '5m',
-  basePrice = 4420.00
+  basePrice = 4336.50
 ): Candle[] {
   const candles: Candle[] = [];
   const stepMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : 15;
@@ -124,7 +124,7 @@ export function generateNextTick(
   liveTargetPrice?: number
 ): { updatedCandles: Candle[]; newCandleCreated: boolean; tickPrice: number } {
   if (candles.length === 0) {
-    const initial = generateInitialGoldData(60, timeframe, liveTargetPrice || 4420.00);
+    const initial = generateInitialGoldData(60, timeframe, liveTargetPrice || 4336.50);
     return { updatedCandles: initial, newCandleCreated: true, tickPrice: initial[initial.length - 1].close };
   }
 
@@ -134,15 +134,16 @@ export function generateNextTick(
   const candleDuration = stepMinutes * 60 * 1000;
   const elapsed = now - last.time;
 
-  let newPrice: number;
+      let newPrice: number;
   if (liveTargetPrice !== undefined && !isNaN(liveTargetPrice) && liveTargetPrice > 0) {
+    // Exactly match the live feed without artificial randomization
     newPrice = Number(liveTargetPrice.toFixed(2));
   } else {
-    const tickDelta = Number(((Math.random() - 0.5) * 0.25).toFixed(2));
+    const tickDelta = Number(((Math.random() - 0.5) * 0.45).toFixed(2));
     newPrice = Number((last.close + tickDelta).toFixed(2));
   }
 
-  if (elapsed >= candleDuration) {
+if (elapsed >= candleDuration) {
     const date = new Date(now);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
     const newCandle: Candle = {

@@ -16,6 +16,12 @@ import {
   Check,
 } from 'lucide-react';
 import { TRADER_QUOTES } from '../data/quotes';
+import {
+  clientRegisterUser,
+  clientLoginUser,
+  MASTER_ADMIN_USER,
+  ADMIN_EMAIL,
+} from '../utils/authClient';
 
 interface AuthViewProps {
   onAuthSuccess: (user: UserAccount) => void;
@@ -56,28 +62,22 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
     try {
       const res = await fetch('/api/auth/admin-quick-login', { method: 'POST' });
       if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.user) {
-          onAuthSuccess(data.user);
-          return;
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          if (data.success && data.user) {
+            onAuthSuccess(data.user);
+            return;
+          }
+        } catch {
+          // Non-JSON response, ignore and use Master Admin fallback
         }
       }
     } catch {
-      // Graceful fallback to client-side admin account
+      // Graceful fallback
     }
 
-    // Unbreakable client-side fallback ensuring TwoStarTrader never sees an error
-    const localAdmin: UserAccount = {
-      id: 'admin-twostartrader',
-      name: 'TwoStarTrader',
-      email: 'khrafiullah2@gmail.com',
-      phone: '03110116709',
-      role: 'ADMIN',
-      status: 'APPROVED',
-      registeredAt: Date.now(),
-      approvedAt: Date.now(),
-    };
-    onAuthSuccess(localAdmin);
+    onAuthSuccess(MASTER_ADMIN_USER);
     setLoading(false);
   };
 
@@ -87,33 +87,36 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess, onEnterDemo }
     setLoading(true);
 
     try {
-      // If admin email, always use direct admin authentication
+      // If admin email, grant immediate Master Admin access
       if (isAdminEmail) {
         await handleAdminDirectAccess();
         return;
       }
 
-      const endpoint = activeTab === 'signup' ? '/api/auth/register' : '/api/auth/login';
-      const payload =
-        activeTab === 'signup'
-          ? { name, email, phone, password, paymentProofNotes: paymentNotes }
-          : { email, password };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed. Please verify your credentials.');
+      if (activeTab === 'signup') {
+        const result = await clientRegisterUser({
+          name,
+          email,
+          phone,
+          password,
+          paymentNotes,
+        });
+        if (result.success) {
+          onAuthSuccess(result.user);
+        }
+      } else {
+        const result = await clientLoginUser({
+          email,
+          password,
+        });
+        if (result.success) {
+          onAuthSuccess(result.user);
+        }
       }
-
-      onAuthSuccess(data.user);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Unable to sign in. Please check your credentials or switch to Create Account.');
+      setErrorMessage(
+        err.message || 'Unable to sign in. Please verify your credentials or click Create Account.'
+      );
     } finally {
       setLoading(false);
     }

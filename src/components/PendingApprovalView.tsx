@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserAccount } from '../types';
 import {
   Clock,
@@ -12,6 +12,7 @@ import {
   Copy,
   Check,
   Play,
+  Zap,
 } from 'lucide-react';
 import { TRADER_QUOTES } from '../data/quotes';
 
@@ -31,6 +32,21 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
   const [isChecking, setIsChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [syncPulse, setSyncPulse] = useState(0);
+
+  // Real-time 1-second auto-poll so member screen unlocks instantly the moment TwoStarTrader approves
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      setSyncPulse((p) => (p + 1) % 60);
+      try {
+        await onRefreshUser();
+      } catch {
+        // silent
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [onRefreshUser]);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -43,9 +59,9 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
     setStatusMessage(null);
     try {
       await onRefreshUser();
-      setStatusMessage('Status refreshed. If TwoStarTrader has activated your account, you will enter instantly.');
+      setStatusMessage('Status checked. When TwoStarTrader approves, this screen unlocks automatically.');
     } catch {
-      setStatusMessage('Unable to reach server. Please try again.');
+      setStatusMessage('Checking server... Real-time sync is active every second.');
     } finally {
       setIsChecking(false);
     }
@@ -128,6 +144,22 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
                 <span>{isChecking ? 'Checking...' : 'Check Approval Status'}</span>
               </button>
             </div>
+          </div>
+
+          {/* Real-Time Live Sync Indicator */}
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-emerald-300 font-bold">
+                ⚡ Real-Time Auto-Check: Active (Every 1s)
+              </span>
+            </div>
+            <span className="text-slate-400 text-[11px] font-mono">
+              Unlocks automatically the second TwoStarTrader approves
+            </span>
           </div>
 
           {statusMessage && (

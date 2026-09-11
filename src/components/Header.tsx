@@ -17,6 +17,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
+import { getNextScheduledSignalTime } from '../utils/indicatorEngine';
 import { IndicatorSettings, UserAccount, Mt5LiveMarketData } from '../types';
 
 interface HeaderProps {
@@ -33,6 +34,7 @@ interface HeaderProps {
   onLogout?: () => void;
   onOpenContact?: () => void;
   onOpenAdmin?: () => void;
+  pendingCount?: number;
   mt5Data?: Mt5LiveMarketData | null;
   mt5Offset?: number;
   onSetMt5Offset?: (offset: number) => void;
@@ -53,6 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenContact,
   onOpenAdmin,
+  pendingCount = 0,
   mt5Data,
   mt5Offset = 0,
   onSetMt5Offset,
@@ -93,6 +96,35 @@ export const Header: React.FC<HeaderProps> = ({
       setIsEditingPrice(false);
     }
   };
+
+
+  
+  const [nextSignalMs, setNextSignalMs] = useState<number>(0);
+  const [timeUntilNext, setTimeUntilNext] = useState<string>('');
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const nextTime = getNextScheduledSignalTime(Date.now());
+      setNextSignalMs(nextTime);
+      const diff = nextTime - Date.now();
+      if (diff <= 0) {
+        setTimeUntilNext('GENERATING NOW...');
+        return;
+      }
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      const nextDate = new Date(nextTime);
+      const exactTime = `${nextDate.getHours().toString().padStart(2, '0')}:${nextDate.getMinutes().toString().padStart(2, '0')}`;
+      
+      setTimeUntilNext(`${exactTime} (in ${h > 0 ? h + 'h ' : ''}${m}m ${s}s)`);
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <header id="app-header" className="w-full flex flex-wrap items-center justify-between px-4 sm:px-6 py-2.5 border-b border-sky-100 bg-white shadow-xs select-none gap-3">
@@ -205,7 +237,7 @@ export const Header: React.FC<HeaderProps> = ({
                     value={customPriceInput}
                     onChange={(e) => setCustomPriceInput(e.target.value)}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-hidden"
-                    placeholder="e.g. 4420.50"
+                    placeholder="e.g. 4336.50"
                   />
                   <button
                     onClick={() => handleCalibrateMt5Price(parseFloat(customPriceInput))}
@@ -259,6 +291,16 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right: Timeframe, Live Feed Ticker & Sound */}
       <div className="flex items-center gap-3">
+
+        {/* Next Signal Schedule Countdown */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 shadow-xs mr-2">
+           <Zap className="w-4 h-4 text-indigo-600 animate-pulse" />
+           <div className="flex flex-col">
+             <span className="text-[9px] font-black uppercase text-indigo-800 tracking-wider leading-none">Next Signal In</span>
+             <span className="text-xs font-mono font-bold text-indigo-950 leading-none mt-0.5">{timeUntilNext}</span>
+           </div>
+        </div>
+
         {/* Timeframe selector */}
         <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
           {(['1m', '5m', '15m'] as const).map((tf) => (
@@ -334,11 +376,21 @@ export const Header: React.FC<HeaderProps> = ({
         {user?.role === 'ADMIN' && onOpenAdmin && (
           <button
             onClick={onOpenAdmin}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-400/50 text-xs font-bold transition-all shadow-sm hover:shadow-amber-500/20 cursor-pointer"
+            className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer ${
+              pendingCount > 0
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border border-amber-300 ring-2 ring-amber-400/60 shadow-md shadow-amber-500/20'
+                : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-400/50 hover:shadow-amber-500/20'
+            }`}
             title="Manage customer $15 approvals"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-extrabold">👑 Admin Console</span>
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-extrabold tracking-tight">👑 Admin Console</span>
+            {pendingCount > 0 && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                <span>{pendingCount} PENDING</span>
+              </span>
+            )}
           </button>
         )}
 

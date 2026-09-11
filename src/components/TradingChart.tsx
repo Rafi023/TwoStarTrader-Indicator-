@@ -15,7 +15,10 @@ import {
   RotateCcw,
   Radio,
   BarChart3,
+  Layers,
+  Activity,
 } from 'lucide-react';
+import { calculateEMA } from '../utils/indicatorEngine';
 import { TradingViewWidget } from './TradingViewWidget';
 
 interface TradingChartProps {
@@ -81,7 +84,55 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const usableWidth = Math.max(100, rightScaleX - padding.left);
   const candleWidth = displayedCandles.length > 0 ? usableWidth / displayedCandles.length : 15;
 
-  // Calculate High/Low range of displayed candles
+  // Active Trade Setup to project (Indicator Signal has primary priority for indicator analysis)
+  const activeTradeSetup = useMemo(() => {
+    // 1. Primary Authority: Active Indicator Engine Decision Signal
+    if (activeSignal) {
+      const isBuy = activeSignal.type.includes('BUY');
+      return {
+        id: activeSignal.id,
+        isBuy,
+        direction: isBuy ? ('BUY' as const) : ('SELL' as const),
+        entryPrice: activeSignal.entryPrice,
+        stopLoss: activeSignal.stopLoss,
+        takeProfit1: activeSignal.takeProfit1,
+        takeProfit2: activeSignal.takeProfit2,
+        takeProfit3: activeSignal.takeProfit3,
+        riskPips: activeSignal.riskPips,
+        rewardPips: activeSignal.rewardPips,
+        lotSize: 0.1,
+        tradeStyle: activeSignal.tradeStyle ?? 'SCALPING',
+      };
+    }
+    // 2. Secondary: Active manual user position if opened
+    if (activePosition) {
+      const isBuy = activePosition.direction === 'BUY';
+      const riskPips = activePosition.riskPips || Math.round(Math.abs(activePosition.entryPrice - activePosition.stopLossPrice) * 10);
+      const rewardPips = activePosition.rewardPips || Math.round(Math.abs(activePosition.takeProfitPrice - activePosition.entryPrice) * 10);
+      const riskAmount = Math.abs(activePosition.entryPrice - activePosition.stopLossPrice);
+      return {
+        id: activePosition.id,
+        isBuy,
+        direction: activePosition.direction,
+        entryPrice: activePosition.entryPrice,
+        stopLoss: activePosition.stopLossPrice,
+        takeProfit1: activePosition.takeProfitPrice,
+        takeProfit2: isBuy
+          ? Number((activePosition.entryPrice + riskAmount * 2.2).toFixed(2))
+          : Number((activePosition.entryPrice - riskAmount * 2.2).toFixed(2)),
+        takeProfit3: isBuy
+          ? Number((activePosition.entryPrice + riskAmount * 3.5).toFixed(2))
+          : Number((activePosition.entryPrice - riskAmount * 3.5).toFixed(2)),
+        riskPips,
+        rewardPips,
+        lotSize: activePosition.lotSize,
+        tradeStyle: 'SCALPING',
+      };
+    }
+    return null;
+  }, [activePosition, activeSignal]);
+
+  // Calculate High/Low range of displayed candles and active trade targets
   const { minPrice, maxPrice, priceRange } = useMemo(() => {
     if (displayedCandles.length === 0) {
       return { minPrice: 4368, maxPrice: 4388, priceRange: 20 };
@@ -94,9 +145,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       if (c.high > max) max = c.high;
     });
 
-    if (activePosition) {
-      min = Math.min(min, activePosition.stopLossPrice, activePosition.takeProfitPrice);
-      max = Math.max(max, activePosition.stopLossPrice, activePosition.takeProfitPrice);
+    if (activeTradeSetup) {
+      min = Math.min(min, activeTradeSetup.stopLoss, activeTradeSetup.takeProfit1, activeTradeSetup.takeProfit2);
+      max = Math.max(max, activeTradeSetup.stopLoss, activeTradeSetup.takeProfit1, activeTradeSetup.takeProfit2);
+      if (activeTradeSetup.takeProfit3) {
+        min = Math.min(min, activeTradeSetup.takeProfit3);
+        max = Math.max(max, activeTradeSetup.takeProfit3);
+      }
     }
 
     // Include buffer for MT5 breathing room
@@ -106,7 +161,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       maxPrice: Number((max + buffer).toFixed(2)),
       priceRange: Number(((max + buffer) - (min - buffer)).toFixed(2)),
     };
-  }, [displayedCandles, activePosition]);
+  }, [displayedCandles, activeTradeSetup]);
 
   // Coordinate conversion functions
   const getY = (price: number) => {
@@ -142,6 +197,41 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   }, [minPrice, maxPrice, priceRange]);
 
   const eqPrice = (maxPrice + minPrice) / 2;
+
+  // Calculate EMA 9 (Fast momentum) & EMA 21 (Dynamic trendline)
+  const fullEma9 = useMemo(() => calculateEMA(candles, 9), [candles]);
+  const fullEma21 = useMemo(() => calculateEMA(candles, 21), [candles]);
+  const showEMAs = settings.showEMAs ?? true;
+
+  const ema9Points = useMemo(() => {
+    if (!showEMAs || displayedCandles.length < 2) return '';
+    return displayedCandles
+      .map((_, idx) => {
+        const origIdx = startIndex + idx;
+        const val = fullEma9[origIdx];
+        if (val === undefined) return '';
+        const x = padding.left + idx * candleWidth + candleWidth / 2;
+        const y = getY(val);
+        return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .filter(Boolean)
+      .join(' ');
+  }, [showEMAs, displayedCandles, startIndex, fullEma9, candleWidth, padding.left, maxPrice, priceRange]);
+
+  const ema21Points = useMemo(() => {
+    if (!showEMAs || displayedCandles.length < 2) return '';
+    return displayedCandles
+      .map((_, idx) => {
+        const origIdx = startIndex + idx;
+        const val = fullEma21[origIdx];
+        if (val === undefined) return '';
+        const x = padding.left + idx * candleWidth + candleWidth / 2;
+        const y = getY(val);
+        return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .filter(Boolean)
+      .join(' ');
+  }, [showEMAs, displayedCandles, startIndex, fullEma21, candleWidth, padding.left, maxPrice, priceRange]);
 
   // Mouse move handler for crosshair & tooltip
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -226,7 +316,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </div>
       ) : (
         <>
-          {/* Clean Candlestick Metrics Bar */}
+          {/* Clean Candlestick Metrics Bar & Day/Scalp Trading Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-slate-50 border-b border-slate-200 text-xs">
             {/* Candle OHLC display */}
             <div className="flex items-center gap-3 font-mono text-xs">
@@ -246,12 +336,147 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               )}
             </div>
 
+            {/* Trading Mode Filter & EMA Toggle */}
+            <div className="flex items-center gap-2">
+              {/* Trade Mode Selector */}
+              <div className="flex items-center bg-white rounded-lg border border-sky-200 p-0.5 shadow-xs text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, tradeMode: 'ALL' }))}
+                  className={`px-2 py-1 rounded transition-all cursor-pointer ${
+                    (settings.tradeMode ?? 'ALL') === 'ALL'
+                      ? 'bg-sky-600 text-white font-bold'
+                      : 'text-slate-600 hover:text-sky-700 hover:bg-sky-50'
+                  }`}
+                  title="Show all trading signals"
+                >
+                  All Signals
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, tradeMode: 'SCALPING' }))}
+                  className={`px-2 py-1 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    settings.tradeMode === 'SCALPING'
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                      : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50'
+                  }`}
+                  title="Scalping Mode (1m - 5m fast entries, 15-35 pips)"
+                >
+                  <span>⚡ Scalp (M1/M5)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, tradeMode: 'DAY_TRADING' }))}
+                  className={`px-2 py-1 rounded transition-all flex items-center gap-1 cursor-pointer ${
+                    settings.tradeMode === 'DAY_TRADING'
+                      ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50'
+                  }`}
+                  title="Day Trading Mode (5m - 15m structural trend trades, 40-100 pips)"
+                >
+                  <span>📈 Day Trade (M5/M15)</span>
+                </button>
+              </div>
+
+              {/* Indicator Decision Mode (Auto vs Force Direction) */}
+              <div className="flex items-center bg-white rounded-lg border border-slate-200 p-0.5 shadow-xs text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, signalBias: 'AUTO' }))}
+                  className={`px-2 py-1 rounded transition-all cursor-pointer ${
+                    (settings.signalBias ?? 'AUTO') === 'AUTO'
+                      ? 'bg-slate-900 text-white font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                  title="Indicator automatically calculates Buy vs Sell based on multi-indicator confluence"
+                >
+                  ⚡ Auto Decision
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, signalBias: 'BUY' }))}
+                  className={`px-2 py-1 rounded transition-all cursor-pointer ${
+                    settings.signalBias === 'BUY'
+                      ? 'bg-emerald-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                  title="Calculate precision BUY entry, SL, and TPs on current live market"
+                >
+                  ▲ Scan BUY
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettings((s) => ({ ...s, signalBias: 'SELL' }))}
+                  className={`px-2 py-1 rounded transition-all cursor-pointer ${
+                    settings.signalBias === 'SELL'
+                      ? 'bg-rose-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50'
+                  }`}
+                  title="Calculate precision SELL entry, SL, and TPs on current live market"
+                >
+                  ▼ Scan SELL
+                </button>
+              </div>
+
+              {/* Pro Trader Clean Mode (Only Signals, TPs & MT5 Prices) Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  const isClean = !settings.showOrderBlocks && !settings.showFVG && !settings.showBuySellZones && !settings.showReversals;
+                  if (isClean) {
+                    setSettings((s) => ({
+                      ...s,
+                      showOrderBlocks: true,
+                      showFVG: true,
+                      showBuySellZones: true,
+                      showReversals: true,
+                    }));
+                  } else {
+                    setSettings((s) => ({
+                      ...s,
+                      showOrderBlocks: false,
+                      showFVG: false,
+                      showBuySellZones: false,
+                      showReversals: false,
+                      showSignals: true,
+                    }));
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
+                  (!settings.showOrderBlocks && !settings.showFVG && !settings.showBuySellZones && !settings.showReversals)
+                    ? 'bg-emerald-600 text-white font-black shadow-xs border-emerald-700'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+                title="Toggle Pro Clean View (Exact Signals & TPs only) vs SMC Analysis Layers"
+              >
+                <span>{(!settings.showOrderBlocks && !settings.showFVG && !settings.showBuySellZones && !settings.showReversals) ? '🛡️ Pro Clean View' : '🔧 SMC Analysis'}</span>
+              </button>
+
+              {/* EMA 9 / 21 Overlay Toggle */}
+              <button
+                type="button"
+                onClick={() => setSettings((s) => ({ ...s, showEMAs: !showEMAs }))}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
+                  showEMAs
+                    ? 'bg-sky-50 text-sky-800 border-sky-300 font-bold'
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+                title="Toggle EMA 9 (Fast Scalp) and EMA 21 (Dynamic Trendline)"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+                </div>
+                <span>EMA 9/21</span>
+              </button>
+            </div>
+
             {/* Zoom & View Reset */}
             <div className="flex items-center gap-1">
               <button
                 id="btn-zoom-in"
                 onClick={() => setVisibleCount((c) => Math.max(25, c - 10))}
-                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs"
+                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs cursor-pointer"
                 title="Zoom In"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
@@ -259,7 +484,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               <button
                 id="btn-zoom-out"
                 onClick={() => setVisibleCount((c) => Math.min(80, c + 10))}
-                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs"
+                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs cursor-pointer"
                 title="Zoom Out"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
@@ -267,13 +492,73 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               <button
                 id="btn-reset-zoom"
                 onClick={() => setVisibleCount(45)}
-                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs"
+                className="p-1.5 rounded-lg bg-white border border-sky-200 text-slate-600 hover:text-sky-700 hover:bg-sky-50 transition-colors shadow-xs cursor-pointer"
                 title="Reset View"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
+
+          {/* ========================================================== */}
+          {/* PRO TRADER LIVE INDICATOR DECISION HUD BAR                  */}
+          {/* ========================================================== */}
+          {activeSignal && (
+            <div
+              id="indicator-decision-hud"
+              className={`px-4 py-2 border-b flex flex-wrap items-center justify-between gap-3 text-xs transition-colors ${
+                activeSignal.type.includes('BUY')
+                  ? 'bg-emerald-50/95 border-emerald-200 text-emerald-950'
+                  : 'bg-rose-50/95 border-rose-200 text-rose-950'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {/* Decision Badge */}
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-black text-xs uppercase tracking-wide text-white shadow-xs ${
+                    activeSignal.type.includes('BUY')
+                      ? 'bg-emerald-600 animate-pulse'
+                      : 'bg-rose-600 animate-pulse'
+                  }`}
+                >
+                  <span>{activeSignal.type.includes('BUY') ? '▲ INDICATOR: ENTER BUY NOW' : '▼ INDICATOR: ENTER SELL NOW'}</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-[12px] font-mono">
+                  <span>Entry: <strong className="font-black">${activeSignal.entryPrice.toFixed(2)}</strong></span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-rose-700 font-bold">
+                    🛑 SL: ${activeSignal.stopLoss.toFixed(2)} (-{activeSignal.riskPips}p)
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-emerald-700 font-bold">
+                    🎯 TP1: ${activeSignal.takeProfit1.toFixed(2)} (+{Math.round(Math.abs(activeSignal.takeProfit1 - activeSignal.entryPrice) * 10)}p)
+                  </span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-emerald-700 font-black">
+                    🎯 TP2: ${activeSignal.takeProfit2.toFixed(2)} (+{activeSignal.rewardPips}p)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 text-[11px]">
+                <div className="flex items-center gap-1.5 bg-white/90 px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                  <span className="font-bold text-slate-500">Confluence:</span>
+                  <strong
+                    className={`font-black ${
+                      activeSignal.type.includes('BUY') ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {activeSignal.confluenceScore}% ({activeSignal.tradeStyle === 'DAY_TRADE' ? 'Day Trade' : 'Scalp'})
+                  </strong>
+                </div>
+
+                <div className="hidden lg:block text-slate-700 font-semibold text-[11px] truncate max-w-sm" title={activeSignal.confluences.join(' • ')}>
+                  ⚡ {activeSignal.confluences[0] || 'High Probability Structure Alignment'}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Chart Canvas Area with MT5-Style Right Price Scale */}
           <div
@@ -477,6 +762,36 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 })}
 
               {/* ========================================================== */}
+              {/* 3.5. EMA 9 (Fast Momentum) & EMA 21 (Dynamic Trendline)    */}
+              {/* ========================================================== */}
+              {showEMAs && (
+                <g id="ema-trend-lines">
+                  {ema21Points && (
+                    <path
+                      d={ema21Points}
+                      fill="none"
+                      stroke="#6366f1"
+                      strokeWidth="2"
+                      strokeOpacity="0.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                  {ema9Points && (
+                    <path
+                      d={ema9Points}
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="2.2"
+                      strokeOpacity="0.95"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                </g>
+              )}
+
+              {/* ========================================================== */}
               {/* 4. CANDLESTICKS RENDERING                                  */}
               {/* ========================================================== */}
               {displayedCandles.map((candle, idx) => {
@@ -539,6 +854,45 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                 );
               })}
 
+              {/* EMA Live Value Legend on Top-Left */}
+              {showEMAs && (
+                <g id="ema-canvas-legend" transform="translate(18, 14)">
+                  <rect
+                    x="0"
+                    y="0"
+                    width="176"
+                    height="20"
+                    rx="5"
+                    fill="#ffffff"
+                    fillOpacity="0.9"
+                    stroke="#cbd5e1"
+                    strokeWidth="0.8"
+                  />
+                  <circle cx="10" cy="10" r="3.5" fill="#f59e0b" />
+                  <text
+                    x="18"
+                    y="13.5"
+                    fill="#b45309"
+                    fontSize="9.5"
+                    fontWeight="bold"
+                    fontFamily="JetBrains Mono, monospace"
+                  >
+                    EMA 9: ${(fullEma9[fullEma9.length - 1] || 0).toFixed(2)}
+                  </text>
+                  <circle cx="98" cy="10" r="3.5" fill="#6366f1" />
+                  <text
+                    x="106"
+                    y="13.5"
+                    fill="#4338ca"
+                    fontSize="9.5"
+                    fontWeight="bold"
+                    fontFamily="JetBrains Mono, monospace"
+                  >
+                    EMA 21: ${(fullEma21[fullEma21.length - 1] || 0).toFixed(2)}
+                  </text>
+                </g>
+              )}
+
               {/* 5. REVERSALS & SWEEPS */}
               {settings.showReversals &&
                 reversals.map((rev) => {
@@ -587,7 +941,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                   );
                 })}
 
-              {/* 6. SCALPING SIGNALS MARKERS */}
+              {/* 6. DAY TRADING & SCALPING SIGNAL MARKERS */}
               {settings.showSignals &&
                 signals.map((sig) => {
                   const candlePos = sig.candleIndex - startIndex;
@@ -598,8 +952,16 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                   if (!candle) return null;
 
                   const isBuy = sig.type.includes('BUY');
+                  const isDayTrade = sig.tradeStyle === 'DAY_TRADE';
                   const yPos = isBuy ? getY(candle.low) + 40 : getY(candle.high) - 38;
                   const isSelected = activeSignal?.id === sig.id;
+
+                  const isAdvance = sig.isPredictiveAdvance;
+                  const advanceIcon = isAdvance ? '🔮 ' : '';
+                  const gradePrefix = sig.signalGrade ? `★${sig.signalGrade} ` : '';
+                  const stylePrefix = isDayTrade ? 'DAY' : 'SCALP';
+                  const labelText = `${advanceIcon}${gradePrefix}${stylePrefix} ${isBuy ? 'BUY' : 'SELL'} $${sig.entryPrice.toFixed(1)}`;
+                  const pillWidth = isAdvance ? 152 : 136;
 
                   return (
                     <g
@@ -607,70 +969,112 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                       onClick={() => onSelectSignal(sig)}
                       className="cursor-pointer group"
                     >
+                      {/* Directional Indicator Pointer Arrow */}
                       <polygon
                         points={
                           isBuy
-                            ? `${xCenter},${yPos - 14} ${xCenter - 8},${yPos - 2} ${xCenter + 8},${yPos - 2}`
-                            : `${xCenter},${yPos + 14} ${xCenter - 8},${yPos + 2} ${xCenter + 8},${yPos + 2}`
+                            ? `${xCenter},${yPos - 14} ${xCenter - 7},${yPos - 2} ${xCenter + 7},${yPos - 2}`
+                            : `${xCenter},${yPos + 14} ${xCenter - 7},${yPos + 2} ${xCenter + 7},${yPos + 2}`
                         }
                         fill={isBuy ? '#10b981' : '#f43f5e'}
                       />
+                      {/* Badge Background */}
                       <rect
-                        x={xCenter - 56}
+                        x={xCenter - pillWidth / 2}
                         y={isBuy ? yPos : yPos - 22}
-                        width="112"
-                        height="20"
-                        rx="10"
-                        fill={isBuy ? '#10b981' : '#f43f5e'}
-                        stroke={isSelected ? '#0f172a' : 'none'}
-                        strokeWidth={isSelected ? '2' : '0'}
+                        width={pillWidth}
+                        height="22"
+                        rx="11"
+                        fill={isBuy ? '#059669' : '#e11d48'}
+                        stroke={isAdvance ? '#c084fc' : sig.signalGrade === 'A+' ? '#fbbf24' : isSelected ? '#0f172a' : '#ffffff'}
+                        strokeWidth={isAdvance ? '2.2' : sig.signalGrade === 'A+' ? '2.5' : isSelected ? '2' : '1'}
+                        className="transition-transform group-hover:scale-105"
                       />
+                      {/* Signal Label with Style and Price */}
                       <text
                         x={xCenter}
-                        y={isBuy ? yPos + 13.5 : yPos - 8.5}
+                        y={isBuy ? yPos + 14.5 : yPos - 7.5}
                         fill="#ffffff"
-                        fontSize="9.5"
-                        fontFamily="Plus Jakarta Sans, sans-serif"
+                        fontSize="9"
+                        fontFamily="JetBrains Mono, monospace"
                         fontWeight="900"
-                        letterSpacing="0.06em"
+                        letterSpacing="0.04em"
                         textAnchor="middle"
                       >
-                        {isBuy ? 'AI BUY SIGNAL' : 'AI SELL SIGNAL'}
+                        {labelText}
                       </text>
+
+                      {/* Small Status Pill if outcome reached */}
+                      {sig.status !== 'ACTIVE' && sig.status !== 'PENDING' && (
+                        <g>
+                          <rect
+                            x={xCenter - 28}
+                            y={isBuy ? yPos + 24 : yPos - 38}
+                            width="56"
+                            height="14"
+                            rx="7"
+                            fill={sig.status.includes('TP') ? '#ecfdf5' : '#fff1f2'}
+                            stroke={sig.status.includes('TP') ? '#10b981' : '#f43f5e'}
+                            strokeWidth="0.8"
+                          />
+                          <text
+                            x={xCenter}
+                            y={isBuy ? yPos + 34 : yPos - 28}
+                            fill={sig.status.includes('TP') ? '#047857' : '#be123c'}
+                            fontSize="8"
+                            fontFamily="JetBrains Mono, monospace"
+                            fontWeight="bold"
+                            textAnchor="middle"
+                          >
+                            {sig.profitPips !== undefined
+                              ? `${sig.profitPips >= 0 ? `+${sig.profitPips}` : sig.profitPips}p`
+                              : sig.status}
+                          </text>
+                        </g>
+                      )}
                     </g>
                   );
                 })}
 
               {/* ========================================================== */}
-              {/* 7. SCALP POSITION TARGET / STOP SHADED BOX (TradingView/MT5)*/}
+              {/* 7. PRO TRADER ACTIVE TRADE PROJECTION (ENTRY, TP & SL)     */}
               {/* ========================================================== */}
-              {activePosition && (() => {
-                const isLong = activePosition.direction === 'BUY';
-                const yEntry = getY(activePosition.entryPrice);
-                const yTP = getY(activePosition.takeProfitPrice);
-                const ySL = getY(activePosition.stopLossPrice);
+              {activeTradeSetup && (() => {
+                const isBuy = activeTradeSetup.isBuy;
+                const yEntry = getY(activeTradeSetup.entryPrice);
+                const ySL = getY(activeTradeSetup.stopLoss);
+                const yTP1 = getY(activeTradeSetup.takeProfit1);
+                const yTP2 = getY(activeTradeSetup.takeProfit2);
+                const yTP3 = activeTradeSetup.takeProfit3 ? getY(activeTradeSetup.takeProfit3) : null;
 
-                const greenTop = isLong ? yTP : yEntry;
-                const greenHeight = Math.max(3, Math.abs(yTP - yEntry));
+                const greenTop = isBuy ? yTP2 : yEntry;
+                const greenHeight = Math.max(4, Math.abs(yTP2 - yEntry));
 
-                const redTop = isLong ? yEntry : ySL;
-                const redHeight = Math.max(3, Math.abs(ySL - yEntry));
+                const redTop = isBuy ? yEntry : ySL;
+                const redHeight = Math.max(4, Math.abs(ySL - yEntry));
 
-                const boxLeft = padding.left + usableWidth * 0.45;
-                const boxWidth = usableWidth * 0.55;
+                const tp1Pips = Math.round(Math.abs(activeTradeSetup.takeProfit1 - activeTradeSetup.entryPrice) * 10);
+                const tp2Pips = Math.round(Math.abs(activeTradeSetup.takeProfit2 - activeTradeSetup.entryPrice) * 10);
+                const tp3Pips = activeTradeSetup.takeProfit3 ? Math.round(Math.abs(activeTradeSetup.takeProfit3 - activeTradeSetup.entryPrice) * 10) : 0;
+                const slPips = Math.round(Math.abs(activeTradeSetup.entryPrice - activeTradeSetup.stopLoss) * 10);
+
+                const boxLeft = padding.left + usableWidth * 0.40;
+                const boxWidth = usableWidth * 0.60;
 
                 return (
-                  <g id="scalp-position-shaded-zone">
+                  <g id="pro-trader-trade-projections">
                     {/* Shaded Profit Target Area */}
                     <rect
                       x={boxLeft}
                       y={greenTop}
                       width={boxWidth}
                       height={greenHeight}
-                      fill="#22c55e"
-                      fillOpacity="0.18"
-                      stroke="#16a34a"
+                      fill="#10b981"
+                      fillOpacity="0.14"
+                      stroke="#059669"
                       strokeWidth="1.2"
+                      strokeDasharray="4 2"
+                      rx="3"
                     />
 
                     {/* Shaded Stop Loss Risk Area */}
@@ -679,21 +1083,172 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                       y={redTop}
                       width={boxWidth}
                       height={redHeight}
-                      fill="#ef4444"
-                      fillOpacity="0.18"
+                      fill="#f43f5e"
+                      fillOpacity="0.14"
                       stroke="#dc2626"
                       strokeWidth="1.2"
+                      strokeDasharray="4 2"
+                      rx="3"
                     />
 
-                    {/* Entry Center Line */}
+                    {/* TAKE PROFIT 2 (MAIN TARGET) LINE & PILL */}
                     <line
-                      x1={boxLeft}
+                      x1={padding.left}
+                      y1={yTP2}
+                      x2={rightScaleX}
+                      y2={yTP2}
+                      stroke="#059669"
+                      strokeWidth="2.2"
+                      strokeDasharray="6 3"
+                    />
+                    <rect
+                      x={padding.left + 12}
+                      y={yTP2 - 11}
+                      width="170"
+                      height="21"
+                      rx="10.5"
+                      fill="#059669"
+                      filter="drop-shadow(0 1px 2px rgba(0,0,0,0.15))"
+                    />
+                    <text
+                      x={padding.left + 22}
+                      y={yTP2 + 3.5}
+                      fill="#ffffff"
+                      fontSize="10"
+                      fontFamily="JetBrains Mono, monospace"
+                      fontWeight="900"
+                      letterSpacing="0.03em"
+                    >
+                      🎯 TP 2: ${activeTradeSetup.takeProfit2.toFixed(2)} (+{tp2Pips}p)
+                    </text>
+
+                    {/* TAKE PROFIT 1 (FIRST TARGET) LINE & PILL */}
+                    <line
+                      x1={padding.left}
+                      y1={yTP1}
+                      x2={rightScaleX}
+                      y2={yTP1}
+                      stroke="#16a34a"
+                      strokeWidth="1.8"
+                      strokeDasharray="4 3"
+                    />
+                    <rect
+                      x={padding.left + 12}
+                      y={yTP1 - 10}
+                      width="160"
+                      height="20"
+                      rx="10"
+                      fill="#16a34a"
+                      filter="drop-shadow(0 1px 2px rgba(0,0,0,0.15))"
+                    />
+                    <text
+                      x={padding.left + 22}
+                      y={yTP1 + 3.5}
+                      fill="#ffffff"
+                      fontSize="9.5"
+                      fontFamily="JetBrains Mono, monospace"
+                      fontWeight="900"
+                      letterSpacing="0.03em"
+                    >
+                      🎯 TP 1: ${activeTradeSetup.takeProfit1.toFixed(2)} (+{tp1Pips}p)
+                    </text>
+
+                    {/* TAKE PROFIT 3 (RUNNER TARGET IF PRESENT) LINE & PILL */}
+                    {yTP3 !== null && activeTradeSetup.takeProfit3 && (
+                      <g>
+                        <line
+                          x1={padding.left}
+                          y1={yTP3}
+                          x2={rightScaleX}
+                          y2={yTP3}
+                          stroke="#0d9488"
+                          strokeWidth="1.8"
+                          strokeDasharray="5 3"
+                        />
+                        <rect
+                          x={padding.left + 12}
+                          y={yTP3 - 10}
+                          width="180"
+                          height="20"
+                          rx="10"
+                          fill="#0d9488"
+                          filter="drop-shadow(0 1px 2px rgba(0,0,0,0.15))"
+                        />
+                        <text
+                          x={padding.left + 22}
+                          y={yTP3 + 3.5}
+                          fill="#ffffff"
+                          fontSize="9.5"
+                          fontFamily="JetBrains Mono, monospace"
+                          fontWeight="900"
+                          letterSpacing="0.03em"
+                        >
+                          🎯 TP 3: ${activeTradeSetup.takeProfit3.toFixed(2)} (+{tp3Pips}p)
+                        </text>
+                      </g>
+                    )}
+
+                    {/* PINPOINT BUY/SELL ENTRY LINE & PILL */}
+                    <line
+                      x1={padding.left}
                       y1={yEntry}
                       x2={rightScaleX}
                       y2={yEntry}
                       stroke="#2563eb"
-                      strokeWidth="1.5"
+                      strokeWidth="2.4"
+                      strokeDasharray="6 3"
                     />
+                    <rect
+                      x={padding.left + 12}
+                      y={yEntry - 12}
+                      width="180"
+                      height="22"
+                      rx="11"
+                      fill="#2563eb"
+                      filter="drop-shadow(0 2px 3px rgba(0,0,0,0.2))"
+                    />
+                    <text
+                      x={padding.left + 22}
+                      y={yEntry + 3.5}
+                      fill="#ffffff"
+                      fontSize="10"
+                      fontFamily="JetBrains Mono, monospace"
+                      fontWeight="900"
+                      letterSpacing="0.04em"
+                    >
+                      🔵 {isBuy ? 'BUY' : 'SELL'} ENTRY: ${activeTradeSetup.entryPrice.toFixed(2)}
+                    </text>
+
+                    {/* STOP LOSS (SL) LINE & PILL */}
+                    <line
+                      x1={padding.left}
+                      y1={ySL}
+                      x2={rightScaleX}
+                      y2={ySL}
+                      stroke="#dc2626"
+                      strokeWidth="2"
+                      strokeDasharray="5 3"
+                    />
+                    <rect
+                      x={padding.left + 12}
+                      y={ySL - 10}
+                      width="165"
+                      height="20"
+                      rx="10"
+                      fill="#dc2626"
+                      filter="drop-shadow(0 1px 2px rgba(0,0,0,0.15))"
+                    />
+                    <text
+                      x={padding.left + 22}
+                      y={ySL + 3.5}
+                      fill="#ffffff"
+                      fontSize="9.5"
+                      fontFamily="JetBrains Mono, monospace"
+                      fontWeight="900"
+                      letterSpacing="0.03em"
+                    >
+                      🛑 STOP LOSS: ${activeTradeSetup.stopLoss.toFixed(2)} (-{slPips}p)
+                    </text>
                   </g>
                 );
               })()}
@@ -766,43 +1321,49 @@ export const TradingChart: React.FC<TradingChartProps> = ({
               </g>
 
               {/* ========================================================== */}
-              {/* 9. MT5 ACTIVE POSITION ORDER LINES & RIGHT SCALE BADGES    */}
+              {/* 9. MT5 RIGHT SCALE BADGES FOR ACTIVE TRADE SETUP           */}
               {/* ========================================================== */}
-              {activePosition && (() => {
-                const yEntry = getY(activePosition.entryPrice);
-                const yTP = getY(activePosition.takeProfitPrice);
-                const ySL = getY(activePosition.stopLossPrice);
+              {activeTradeSetup && (() => {
+                const yEntry = getY(activeTradeSetup.entryPrice);
+                const yTP1 = getY(activeTradeSetup.takeProfit1);
+                const yTP2 = getY(activeTradeSetup.takeProfit2);
+                const yTP3 = activeTradeSetup.takeProfit3 ? getY(activeTradeSetup.takeProfit3) : null;
+                const ySL = getY(activeTradeSetup.stopLoss);
 
                 return (
                   <g id="mt5-active-order-badges">
-                    {/* Take Profit (TP) Line & Right Badge */}
-                    <line
-                      x1={padding.left}
-                      y1={yTP}
-                      x2={rightScaleX}
-                      y2={yTP}
-                      stroke="#16a34a"
-                      strokeWidth="1.2"
-                      strokeDasharray="4 3"
+                    {/* MT5 Right Scale TP2 Badge */}
+                    <polygon
+                      points={`${rightScaleX},${yTP2} ${rightScaleX + 6},${yTP2 - 8} ${rightScaleX + 6},${yTP2 + 8}`}
+                      fill="#059669"
+                    />
+                    <rect
+                      x={rightScaleX + 6}
+                      y={yTP2 - 9}
+                      width={padding.right - 8}
+                      height={18}
+                      rx="2"
+                      fill="#059669"
                     />
                     <text
-                      x={padding.left + 8}
-                      y={yTP - 4}
-                      fill="#16a34a"
-                      fontSize="9.5"
+                      x={rightScaleX + 9}
+                      y={yTP2 + 3.5}
+                      fill="#ffffff"
+                      fontSize="10"
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
                     >
-                      t/p: +{activePosition.rewardPips} pips
+                      TP2 {activeTradeSetup.takeProfit2.toFixed(2)}
                     </text>
-                    {/* MT5 Right Scale TP Badge */}
+
+                    {/* MT5 Right Scale TP1 Badge */}
                     <polygon
-                      points={`${rightScaleX},${yTP} ${rightScaleX + 6},${yTP - 8} ${rightScaleX + 6},${yTP + 8}`}
+                      points={`${rightScaleX},${yTP1} ${rightScaleX + 6},${yTP1 - 8} ${rightScaleX + 6},${yTP1 + 8}`}
                       fill="#16a34a"
                     />
                     <rect
                       x={rightScaleX + 6}
-                      y={yTP - 9}
+                      y={yTP1 - 9}
                       width={padding.right - 8}
                       height={18}
                       rx="2"
@@ -810,35 +1371,43 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                     />
                     <text
                       x={rightScaleX + 9}
-                      y={yTP + 3.5}
+                      y={yTP1 + 3.5}
                       fill="#ffffff"
                       fontSize="10"
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
                     >
-                      TP {activePosition.takeProfitPrice.toFixed(2)}
+                      TP1 {activeTradeSetup.takeProfit1.toFixed(2)}
                     </text>
 
-                    {/* Entry Price Line & Right Badge */}
-                    <line
-                      x1={padding.left}
-                      y1={yEntry}
-                      x2={rightScaleX}
-                      y2={yEntry}
-                      stroke="#2563eb"
-                      strokeWidth="1.2"
-                      strokeDasharray="5 3"
-                    />
-                    <text
-                      x={padding.left + 8}
-                      y={yEntry - 4}
-                      fill="#2563eb"
-                      fontSize="9.5"
-                      fontFamily="JetBrains Mono, monospace"
-                      fontWeight="bold"
-                    >
-                      {activePosition.direction.toLowerCase()} {activePosition.lotSize.toFixed(2)}
-                    </text>
+                    {/* MT5 Right Scale TP3 Badge (if exists) */}
+                    {yTP3 !== null && activeTradeSetup.takeProfit3 && (
+                      <g>
+                        <polygon
+                          points={`${rightScaleX},${yTP3} ${rightScaleX + 6},${yTP3 - 8} ${rightScaleX + 6},${yTP3 + 8}`}
+                          fill="#0d9488"
+                        />
+                        <rect
+                          x={rightScaleX + 6}
+                          y={yTP3 - 9}
+                          width={padding.right - 8}
+                          height={18}
+                          rx="2"
+                          fill="#0d9488"
+                        />
+                        <text
+                          x={rightScaleX + 9}
+                          y={yTP3 + 3.5}
+                          fill="#ffffff"
+                          fontSize="10"
+                          fontFamily="JetBrains Mono, monospace"
+                          fontWeight="bold"
+                        >
+                          TP3 {activeTradeSetup.takeProfit3.toFixed(2)}
+                        </text>
+                      </g>
+                    )}
+
                     {/* MT5 Right Scale Entry Badge */}
                     <polygon
                       points={`${rightScaleX},${yEntry} ${rightScaleX + 6},${yEntry - 8} ${rightScaleX + 6},${yEntry + 8}`}
@@ -860,29 +1429,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
                     >
-                      {activePosition.direction} {activePosition.entryPrice.toFixed(2)}
+                      {activeTradeSetup.direction} {activeTradeSetup.entryPrice.toFixed(2)}
                     </text>
 
-                    {/* Stop Loss (SL) Line & Right Badge */}
-                    <line
-                      x1={padding.left}
-                      y1={ySL}
-                      x2={rightScaleX}
-                      y2={ySL}
-                      stroke="#dc2626"
-                      strokeWidth="1.2"
-                      strokeDasharray="3 3"
-                    />
-                    <text
-                      x={padding.left + 8}
-                      y={ySL - 4}
-                      fill="#dc2626"
-                      fontSize="9.5"
-                      fontFamily="JetBrains Mono, monospace"
-                      fontWeight="bold"
-                    >
-                      s/l: -{activePosition.riskPips} pips
-                    </text>
                     {/* MT5 Right Scale SL Badge */}
                     <polygon
                       points={`${rightScaleX},${ySL} ${rightScaleX + 6},${ySL - 8} ${rightScaleX + 6},${ySL + 8}`}
@@ -904,7 +1453,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
                     >
-                      SL {activePosition.stopLossPrice.toFixed(2)}
+                      SL {activeTradeSetup.stopLoss.toFixed(2)}
                     </text>
                   </g>
                 );

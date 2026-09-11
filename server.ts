@@ -22,9 +22,8 @@ const isProduction =
   process.env.NODE_ENV === "production" ||
   (typeof __filename !== "undefined" && (__filename.endsWith(".cjs") || __filename.includes("dist")));
 
-// In development inside AI Studio, nginx routes traffic strictly to port 3000.
-// In production deployment (Cloud Run, Render, Railway, Heroku, Docker), listen on process.env.PORT or fallback to 3000.
-const PORT = isProduction && process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+// PORT MUST strictly be 3000 as required by the AI Studio reverse proxy infrastructure
+const PORT = 3000;
 
 // Universal CORS & Pre-flight Support
 app.use((req, res, next) => {
@@ -159,16 +158,16 @@ interface CachedMarketData {
 let cachedLivePrice: CachedMarketData | null = null;
 const candleCache = new Map<string, CachedMarketData>();
 
-let lastKnownGoldPrice = 4420.25;
-let lastKnownHigh = 4433.72;
-let lastKnownLow = 4347.11;
+let lastKnownGoldPrice = 4336.50;
+let lastKnownHigh = 4348.10;
+let lastKnownLow = 4320.10;
 let lastKnownChange = 22.41;
 let lastKnownChangePercent = 0.51;
 
 function generateFallbackCandles(
   count = 80,
   timeframe: '1m' | '5m' | '15m' = '5m',
-  anchorPrice = 4420.25
+  anchorPrice = 4336.50
 ) {
   const candles: any[] = [];
   const stepMinutes = timeframe === '1m' ? 1 : timeframe === '5m' ? 5 : 15;
@@ -200,7 +199,7 @@ function generateFallbackCandles(
 // Live real-time MT5 spot gold price stream
 app.get("/api/market/gold-live", async (_req, res) => {
   const now = Date.now();
-  if (cachedLivePrice && now - cachedLivePrice.timestamp < 1200) {
+  if (cachedLivePrice && now - cachedLivePrice.timestamp < 0) {
     return res.json(cachedLivePrice.data);
   }
 
@@ -276,7 +275,8 @@ app.get("/api/market/gold-live", async (_req, res) => {
     } catch {}
 
     const microTick = Number(((Math.random() - 0.5) * 0.25).toFixed(2));
-    const price = Number((lastKnownGoldPrice + microTick).toFixed(2));
+    lastKnownGoldPrice = Number((lastKnownGoldPrice + microTick).toFixed(2));
+    const price = lastKnownGoldPrice;
     const liveData = {
       symbol: "XAUUSD",
       price,
@@ -859,11 +859,36 @@ app.get("/api/auth/me", (req, res) => {
   }
 });
 
+// Admin: Get live pending count (lightweight 1-second real-time polling)
+app.get("/api/admin/pending-count", (req, res) => {
+  try {
+    const adminEmail = (req.query.adminEmail as string)?.trim().toLowerCase();
+    if (adminEmail !== "khrafiullah2@gmail.com" && adminEmail !== "twostartrader") {
+      return res.status(403).json({ error: "Unauthorized. Admin privileges required." });
+    }
+    const users = loadUsers();
+    const pending = users
+      .filter((u) => u.role !== "ADMIN" && u.status === "PENDING_APPROVAL")
+      .map(({ passwordHash: _, ...u }) => u);
+    const approved = users.filter((u) => u.role !== "ADMIN" && u.status === "APPROVED");
+
+    return res.json({
+      success: true,
+      pendingCount: pending.length,
+      approvedCount: approved.length,
+      totalCount: users.length,
+      latestPending: pending.length > 0 ? pending[pending.length - 1] : null,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to load pending count" });
+  }
+});
+
 // Admin: Get all users
 app.get("/api/admin/users", (req, res) => {
   try {
     const adminEmail = (req.query.adminEmail as string)?.trim().toLowerCase();
-    if (adminEmail !== "khrafiullah2@gmail.com") {
+    if (adminEmail !== "khrafiullah2@gmail.com" && adminEmail !== "twostartrader") {
       return res.status(403).json({ error: "Unauthorized. Admin privileges required." });
     }
     const users = loadUsers();
@@ -993,17 +1018,23 @@ app.post("/api/admin/delete", (req, res) => {
   }
 });
 
+// Global API 404 handler: guarantees that no /api/* route EVER returns HTML or falls through to Vite/SPA
+app.all("/api/*", (_req, res) => {
+  res.status(404).json({ error: "API endpoint not found", success: false });
+});
+
+// Global API error handler: guarantees that uncaught API exceptions return JSON, never HTML
+app.use("/api", (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("API Error encountered:", err);
+  res.status(500).json({ error: err?.message || "Internal server error", success: false });
+});
+
 // Static Asset Serving & SPA Fallback Helper
 function mountStaticAndSpaFallback() {
   const distPath = path.resolve(process.cwd(), "dist");
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath, { maxAge: "1d", index: false }));
   }
-
-  // API 404 handler so missing API routes return JSON error instead of HTML
-  app.all("/api/*", (_req, res) => {
-    res.status(404).json({ error: "API endpoint not found" });
-  });
 
   // SPA fallback: send index.html for all page routes
   app.get("*", (_req, res) => {

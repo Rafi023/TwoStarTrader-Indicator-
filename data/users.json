@@ -17,10 +17,10 @@
     "phone": "03188154587",
     "passwordHash": "97ec3e2f23f40c3c56750f08a2fa304538d27d366e1d48234b6e2f3dc5a9d0c6",
     "role": "USER",
-    "status": "APPROVED",
-    "paymentProofNotes": "",
+    "status": "REJECTED",
+    "paymentProofNotes": "Manually approved by TwoStarTrader ($15 confirmed)",
     "registeredAt": 1788960216524,
-    "approvedAt": 1788960465754
+    "approvedAt": 1788964306104
   },
   {
     "id": "usr-1788960603632-746et",
@@ -29,9 +29,10 @@
     "phone": "03111234567",
     "passwordHash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
     "role": "USER",
-    "status": "PENDING_APPROVAL",
+    "status": "APPROVED",
     "paymentProofNotes": "EasyPaisa TRX #987654321",
-    "registeredAt": 1788960603632
+    "registeredAt": 1788960603632,
+    "approvedAt": 1788961197852
   },
   {
     "id": "usr-1788960612867-0kzp0",
@@ -40,9 +41,10 @@
     "phone": "03001234567",
     "passwordHash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
     "role": "USER",
-    "status": "PENDING_APPROVAL",
+    "status": "APPROVED",
     "paymentProofNotes": "",
-    "registeredAt": 1788960612867
+    "registeredAt": 1788960612867,
+    "approvedAt": 1788961194383
   },
   {
     "id": "usr-1788960883964-pafhb",
@@ -55,5 +57,50 @@
     "paymentProofNotes": "EasyPaisa TRX998822",
     "registeredAt": 1788960883964,
     "approvedAt": 1788960895830
+  },
+  {
+    "id": "usr-1788963905839-dqbvz",
+    "name": "szeb9168",
+    "email": "szeb9168@gmail.com",
+    "phone": "",
+    "passwordHash": "",
+    "role": "USER",
+    "status": "APPROVED",
+    "paymentProofNotes": "Pre-approved by TwoStarTrader ($15 verified). Ready for customer account creation.",
+    "registeredAt": 1788963905840,
+    "approvedAt": 1788963905840
+  },
+  {
+    "id": "usr-1788964317755-joft9",
+    "name": "test",
+    "email": "test@example.com",
+    "phone": "",
+    "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "role": "USER",
+    "status": "PENDING_APPROVAL",
+    "paymentProofNotes": "",
+    "registeredAt": 1788964317755
+  },
+  {
+    "id": "usr-1788964330233-290tr",
+    "name": "prodtest",
+    "email": "prodtest@example.com",
+    "phone": "",
+    "passwordHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+    "role": "USER",
+    "status": "PENDING_APPROVAL",
+    "paymentProofNotes": "",
+    "registeredAt": 1788964330233
+  },
+  {
+    "id": "usr-1788964614288-hlgsf",
+    "name": "Public Trader",
+    "email": "publictrader@gmail.com",
+    "phone": "03001234567",
+    "passwordHash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+    "role": "USER",
+    "status": "PENDING_APPROVAL",
+    "paymentProofNotes": "Sent 15 USD via Easypaisa",
+    "registeredAt": 1788964614288
   }
 ]

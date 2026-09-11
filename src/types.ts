@@ -56,6 +56,13 @@ export interface ReversalEvent {
 }
 
 export type SignalType = 'STRONG_BUY' | 'BUY' | 'STRONG_SELL' | 'SELL';
+export type TradeStyle = 'SCALPING' | 'DAY_TRADE';
+
+export interface SignalChecklistItem {
+  name: string;
+  passed: boolean;
+  details: string;
+}
 
 export interface ScalpingSignal {
   id: string;
@@ -63,26 +70,48 @@ export interface ScalpingSignal {
   timestamp: number;
   timeStr: string;
   type: SignalType;
+  tradeStyle?: TradeStyle;
+  signalGrade?: 'A+' | 'A' | 'B';
+  marketStructureType?: 'BOS_CONTINUATION' | 'MSS_REVERSAL' | 'LIQUIDITY_SWEEP' | 'EMA_PULLBACK';
   entryPrice: number;
+  entryZone?: { min: number; max: number };
   stopLoss: number;
+  breakEvenPrice?: number;
   takeProfit1: number; // 1:1.5 RR
-  takeProfit2: number; // 1:3 RR
+  takeProfit2: number; // 1:2.5 RR
+  takeProfit3?: number; // 1:4.0 RR Runner
+  riskPips: number;
+  rewardPips: number;
+  spreadBufferPips?: number;
   riskReward: string;
+  actionAdvice?: string;
   confluences: string[];
   confluenceScore: number; // e.g. 92
-  status: 'PENDING' | 'HIT_TP1' | 'HIT_TP2' | 'STOPPED_OUT' | 'ACTIVE';
+  checklist?: SignalChecklistItem[];
+  triggerCondition?: string;
+  invalidationRule?: string;
+  isPredictiveAdvance?: boolean;
+  advanceType?: 'PREDICTIVE_PULLBACK_DIP' | 'PREDICTIVE_RALLY_FADE' | 'LIQUIDITY_HUNT_REVERSAL' | 'PRE_BREAKOUT_COIL';
+  predictedMove?: string;
+  forecastHorizon?: string;
+  anticipatedGainPips?: number;
+  status: 'PENDING' | 'HIT_TP1' | 'HIT_TP2' | 'HIT_TP3' | 'STOPPED_OUT' | 'ACTIVE';
   profitPips?: number;
   reasons: string[];
 }
 
 export interface IndicatorSettings {
   timeframe: '1m' | '5m' | '15m';
+  tradeMode?: 'SCALPING' | 'DAY_TRADING' | 'ALL';
+  signalBias?: 'AUTO' | 'BUY' | 'SELL';
   showOrderBlocks: boolean;
   showFVG: boolean;
   showBuySellZones: boolean;
   showReversals: boolean;
   showSignals: boolean;
   showEquilibrium: boolean;
+  showEMAs?: boolean;
+  showRsi?: boolean;
   soundAlerts: boolean;
   autoAiAnalysis: boolean;
   riskRewardRatio: number; // default 2 or 3

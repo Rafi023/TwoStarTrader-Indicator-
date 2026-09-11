@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ScalpPosition } from '../types';
+import { ScalpPosition, ScalpingSignal } from '../types';
 import {
   TrendingUp,
   TrendingDown,
@@ -11,11 +11,14 @@ import {
   Lock,
   RotateCcw,
   Sliders,
+  Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 
 interface SimpleScalpPlannerProps {
   currentPrice: number;
   activePosition: ScalpPosition | null;
+  activeSignal?: ScalpingSignal | null;
   onApplyPosition: (pos: ScalpPosition) => void;
   onClosePosition: () => void;
   onSetBreakEven: () => void;
@@ -40,6 +43,7 @@ const SL_OPTIONS = [
 export const SimpleScalpPlanner: React.FC<SimpleScalpPlannerProps> = ({
   currentPrice,
   activePosition,
+  activeSignal,
   onApplyPosition,
   onClosePosition,
   onSetBreakEven,
@@ -65,6 +69,34 @@ export const SimpleScalpPlanner: React.FC<SimpleScalpPlannerProps> = ({
   const pipValue = lotSize * 10;
   const potentialProfitDollars = Number((rewardPips * pipValue).toFixed(2));
   const potentialRiskDollars = Number((riskPips * pipValue).toFixed(2));
+
+  // Adopt parameters from Active AI Signal
+  const handleAdoptSignal = (sig: ScalpingSignal) => {
+    const isSigBuy = sig.type.includes('BUY');
+    setDirection(isSigBuy ? 'BUY' : 'SELL');
+    const slDist = Math.max(0.8, Math.abs(sig.entryPrice - sig.stopLoss));
+    setSlDollars(Number(slDist.toFixed(2)));
+    const tpDist = Math.abs(sig.takeProfit2 - sig.entryPrice);
+    const ratio = slDist > 0 ? Number((tpDist / slDist).toFixed(1)) : 2.0;
+    setProfitRatio(ratio);
+
+    const pos: ScalpPosition = {
+      id: `pos-${Date.now()}`,
+      direction: isSigBuy ? 'BUY' : 'SELL',
+      entryPrice: Number(sig.entryPrice.toFixed(2)),
+      stopLossPrice: Number(sig.stopLoss.toFixed(2)),
+      takeProfitPrice: Number(sig.takeProfit2.toFixed(2)),
+      profitRatio: ratio,
+      riskDollars: Number(slDist.toFixed(2)),
+      rewardDollars: Number(tpDist.toFixed(2)),
+      riskPips: sig.riskPips || Math.round(slDist * 10),
+      rewardPips: sig.rewardPips || Math.round(tpDist * 10),
+      lotSize,
+      openedAt: Date.now(),
+      status: 'ACTIVE',
+    };
+    onApplyPosition(pos);
+  };
 
   // Handle Enter Scalp
   const handleEnterScalp = () => {
@@ -124,10 +156,10 @@ export const SimpleScalpPlanner: React.FC<SimpleScalpPlannerProps> = ({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-black text-slate-900 tracking-tight">
-            Scalp Order Entry
+            Order Entry & Scalp Planner
           </h2>
           <p className="text-xs text-slate-500">
-            Select BUY or SELL & set your profit ratio
+            Select BUY or SELL, adopt AI signals, & manage profit targets
           </p>
         </div>
         <button
@@ -138,6 +170,132 @@ export const SimpleScalpPlanner: React.FC<SimpleScalpPlannerProps> = ({
           {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
+      </div>
+
+      {/* Active AI Confluence Signal Sync Card */}
+      {activeSignal && (
+        <div
+          className={`p-3.5 rounded-xl border-2 transition-all ${
+            activeSignal.type.includes('BUY')
+              ? 'bg-emerald-50/70 border-emerald-300'
+              : 'bg-rose-50/70 border-rose-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span
+                className={`w-2 h-2 rounded-full animate-ping ${
+                  activeSignal.type.includes('BUY') ? 'bg-emerald-500' : 'bg-rose-500'
+                }`}
+              />
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">
+                {activeSignal.tradeStyle === 'DAY_TRADE' ? '📈 AI DAY TRADE' : '⚡ AI SCALP'}
+              </span>
+              {activeSignal.signalGrade && (
+                <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 border border-amber-500 shadow-2xs">
+                  ★ {activeSignal.signalGrade}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200">
+              {activeSignal.confluenceScore}% Conf
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between text-xs font-mono py-1">
+            <span className="font-black text-slate-800">
+              {activeSignal.type} @ ${activeSignal.entryPrice.toFixed(2)}
+            </span>
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-rose-600 font-bold">SL ${activeSignal.stopLoss.toFixed(2)}</span>
+              <span className="text-slate-300">•</span>
+              <span className="text-emerald-700 font-bold">TP2 ${activeSignal.takeProfit2.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {activeSignal.triggerCondition && (
+            <p className="text-[10px] font-bold text-slate-700 mt-1 bg-white/70 p-1.5 rounded border border-slate-200/80">
+              🎯 {activeSignal.triggerCondition}
+            </p>
+          )}
+
+          {activeSignal.breakEvenPrice && (
+            <div className="flex items-center justify-between text-[10px] font-mono mt-1 text-slate-600">
+              <span>BE Lock: ${activeSignal.breakEvenPrice.toFixed(2)}</span>
+              <span>Buffer: +{activeSignal.spreadBufferPips || 5}p</span>
+            </div>
+          )}
+
+          {activeSignal.actionAdvice && (
+            <p className="text-[10px] text-slate-600 italic mt-1 font-medium">
+              💡 {activeSignal.actionAdvice}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleAdoptSignal(activeSignal)}
+            className={`mt-2.5 w-full py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+              activeSignal.type.includes('BUY')
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>Apply Signal & Plot On Chart</span>
+          </button>
+        </div>
+      )}
+
+      {/* Fast Strategy Presets for Day Traders and Scalpers */}
+      <div>
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+          Fast Strategy Presets
+        </label>
+        <div className="grid grid-cols-3 gap-1.5 text-[11px] font-semibold">
+          <button
+            type="button"
+            onClick={() => {
+              setSlDollars(1.5);
+              setProfitRatio(2.0);
+            }}
+            className={`py-1.5 px-2 rounded-lg border text-center transition-all cursor-pointer ${
+              slDollars === 1.5 && profitRatio === 2.0
+                ? 'bg-amber-500 text-slate-950 font-black border-amber-500 shadow-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
+            }`}
+          >
+            ⚡ Scalp (15p/30p)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSlDollars(3.0);
+              setProfitRatio(2.5);
+            }}
+            className={`py-1.5 px-2 rounded-lg border text-center transition-all cursor-pointer ${
+              slDollars === 3.0 && profitRatio === 2.5
+                ? 'bg-indigo-600 text-white font-black border-indigo-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
+            }`}
+          >
+            📈 Day (30p/75p)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSlDollars(1.0);
+              setProfitRatio(2.0);
+            }}
+            className={`py-1.5 px-2 rounded-lg border text-center transition-all cursor-pointer ${
+              slDollars === 1.0 && profitRatio === 2.0
+                ? 'bg-emerald-600 text-white font-black border-emerald-600 shadow-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
+            }`}
+          >
+            🎯 Sniper (10p/20p)
+          </button>
+        </div>
       </div>
 
       {/* 1. SELECT BUY OR SELL */}
