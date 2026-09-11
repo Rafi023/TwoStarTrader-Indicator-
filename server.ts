@@ -199,7 +199,7 @@ function generateFallbackCandles(
 // Live real-time MT5 spot gold price stream
 app.get("/api/market/gold-live", async (_req, res) => {
   const now = Date.now();
-  if (cachedLivePrice && now - cachedLivePrice.timestamp < 0) {
+  if (cachedLivePrice && now - cachedLivePrice.timestamp < 800) {
     return res.json(cachedLivePrice.data);
   }
 
@@ -207,27 +207,24 @@ app.get("/api/market/gold-live", async (_req, res) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
 
-    const resp = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=PAXGUSDT", {
+    const resp = await fetch("https://api.binance.com/api/v3/ticker/bookTicker?symbol=PAXGUSDT", {
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (resp.ok) {
       const d: any = await resp.json();
-      const lastPrice = parseFloat(d.lastPrice);
-      const bid = parseFloat(d.bidPrice) || Number((lastPrice - 0.15).toFixed(2));
-      const ask = parseFloat(d.askPrice) || Number((lastPrice + 0.15).toFixed(2));
-      const high = parseFloat(d.highPrice) || lastPrice + 12;
-      const low = parseFloat(d.lowPrice) || lastPrice - 15;
-      const change = parseFloat(d.priceChange) || 0;
-      const changePct = parseFloat(d.priceChangePercent) || 0;
+      const bid = parseFloat(d.bidPrice);
+      const ask = parseFloat(d.askPrice);
+      const lastPrice = Number(((bid + ask) / 2).toFixed(2));
+      
+      const high = lastKnownHigh;
+      const low = lastKnownLow;
+      const change = lastKnownChange;
+      const changePct = lastKnownChangePercent;
       const spreadPips = Number(((ask - bid) * 10).toFixed(1));
 
       lastKnownGoldPrice = lastPrice;
-      lastKnownHigh = high;
-      lastKnownLow = low;
-      lastKnownChange = change;
-      lastKnownChangePercent = changePct;
 
       const liveData = {
         symbol: "XAUUSD",

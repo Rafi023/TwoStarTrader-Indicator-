@@ -92,6 +92,9 @@ export default function App() {
       return 0;
     }
   });
+  const [hasCalibrated, setHasCalibrated] = useState<boolean>(() => {
+    return !!localStorage.getItem('gold_mt5_offset');
+  });
 
   const [mt5Data, setMt5Data] = useState<Mt5LiveMarketData | null>(null);
   const [basePrice, setBasePrice] = useState<number>(4336.50);
@@ -131,8 +134,26 @@ export default function App() {
 
     async function loadLiveMarket() {
       // Fetch live price
-      const live = await fetchLiveMt5Price(mt5Offset);
+      let live = await fetchLiveMt5Price(mt5Offset);
       if (!isMounted) return;
+      
+      if (live && !hasCalibrated) {
+        // Auto-calibrate exactly to 4336.50 on first load to match the baseline
+        const rawPrice = live.price - mt5Offset; // get the true Binance price
+        const initialOffset = Number((4336.50 - rawPrice).toFixed(2));
+        setMt5Offset(initialOffset);
+        setHasCalibrated(true);
+        localStorage.setItem('gold_mt5_offset', initialOffset.toString());
+        
+        // Update the live object with the new offset
+        live = {
+          ...live,
+          price: Number((rawPrice + initialOffset).toFixed(2)),
+          bid: Number((live.bid - mt5Offset + initialOffset).toFixed(2)),
+          ask: Number((live.ask - mt5Offset + initialOffset).toFixed(2))
+        };
+      }
+
       if (live) {
         setMt5Data(live);
         setBasePrice(live.price);
@@ -140,7 +161,8 @@ export default function App() {
       }
 
       // Fetch live candles
-      const liveCandles = await fetchLiveMt5Candles(timeframe, mt5Offset, 80);
+            const currentOffset = (!hasCalibrated && live) ? Number((4336.50 - (live.price - mt5Offset)).toFixed(2)) : mt5Offset;
+      const liveCandles = await fetchLiveMt5Candles(timeframe, currentOffset, 80);
       if (!isMounted) return;
       if (liveCandles && liveCandles.length > 0) {
         setCandles(liveCandles);
